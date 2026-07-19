@@ -170,6 +170,12 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         except (LLMProviderError, LLMParsingError) as exc:
             logger.error(f"не удалось получить extraction от LLM: {exc}")
             return {**state, "error": str(exc)}
+        extraction = extraction.model_copy(
+            update={
+                "region_code": state["region_a"],
+                "business_type": state["business_type"],
+            }
+        )
         return {**state, "extraction": extraction}
 
     prompt = build_comparison_prompt(
@@ -187,6 +193,16 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
     except (LLMProviderError, LLMParsingError) as exc:
         logger.error(f"не удалось получить comparison от LLM: {exc}")
         return {**state, "error": str(exc)}
+    # модель иногда пишет в region_a/region_b человеческое имя вместо кода
+    # ("Новосибирская область") — тогда get_region в рендере падает с 500.
+    # Коды регионов нам уже известны из запроса пользователя, ими и пользуемся.
+    comparison = comparison.model_copy(
+        update={
+            "region_a": state["region_a"],
+            "region_b": state["region_b"],
+            "business_type": state["business_type"],
+        }
+    )
     return {**state, "comparison": comparison}
 
 
