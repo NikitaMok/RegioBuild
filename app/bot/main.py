@@ -30,7 +30,7 @@ async def main() -> None:
     dispatcher.include_router(compare_mode.router)
     dispatcher.include_router(feedback.router)
 
-    logger.info("бот запущен, начинаю polling")
+    logger.info(f"бот запущен, API_BASE_URL={settings.api_base_url}")
     await bot.delete_webhook(drop_pending_updates=True)
     await dispatcher.start_polling(bot)
 

@@ -10,7 +10,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # переменные окружения (Bothost-панель) важнее локального .env —
+    # иначе на хостинге можно залипнуть на старом API_BASE_URL из файла
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        env_ignore_empty=True,
+    )
 
     database_url: str = "sqlite:///./regiobuild.db"
 
