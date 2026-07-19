@@ -18,8 +18,6 @@ def test_parse_json_response_accepts_plain_json() -> None:
 
 
 def test_parse_json_response_strips_markdown_code_fence() -> None:
-    # GigaChat и YandexGPT то и дело оборачивают JSON в ```json ... ``` несмотря
-    # на прямую инструкцию не делать этого — приходится обрабатывать оба случая.
     raw = 'Вот результат:\n```json\n{"name": "кафе", "value": 1}\n```'
     result = parse_json_response(raw, _SampleSchema)
     assert result.name == "кафе"

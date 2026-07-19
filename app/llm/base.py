@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 
 class LLMProvider(ABC):
-    """Общий интерфейс для GigaChat/YandexGPT, чтобы агент не зависел от конкретного вендора."""
+    """GigaChat / YandexGPT за одним интерфейсом."""
 
     name: str = "base"
 
@@ -14,4 +14,4 @@ class LLMProvider(ABC):
 
 
 class LLMProviderError(RuntimeError):
-    """Сеть, авторизация, лимиты — всё, что может пойти не так при вызове LLM API."""
+    """Ошибка вызова LLM API."""

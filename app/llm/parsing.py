@@ -21,7 +21,7 @@ def _strip_code_fence(text: str) -> str:
 
 
 def parse_json_response(raw_text: str, schema: type[ModelT]) -> ModelT:
-    """Модели любят оборачивать JSON в ```json ... ``` — убираем обёртку и валидируем."""
+    """Парсит JSON из ответа модели (в т.ч. из ```json ... ```)."""
     cleaned = _strip_code_fence(raw_text)
 
     try:

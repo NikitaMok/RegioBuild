@@ -15,8 +15,7 @@ class ChromaStore:
         self.persist_dir = persist_dir or settings.chroma_persist_dir
         self.collection_name = collection_name or settings.chroma_collection
 
-        # анонимная телеметрия всё равно шлётся в posthog, который в этой версии
-        # chromadb несовместим с текущим API posthog и просто спамит логи ошибками
+        # иначе chromadb сыпет ошибками posthog в логи
         self._client = chromadb.PersistentClient(
             path=self.persist_dir,
             settings=ChromaSettings(anonymized_telemetry=False),

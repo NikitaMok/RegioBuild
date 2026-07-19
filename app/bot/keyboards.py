@@ -28,9 +28,6 @@ def query_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для перехода к следующему запросу: показываем после того как
-    пользователь отреагировал на фидбек (или сразу, если сохранить фидбек
-    не удалось и кнопок 👍/👎 не было вовсе)."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📍 Требования в регионе", callback_data="mode:info")],
         [InlineKeyboardButton(text="🔀 Сравнить два региона", callback_data="mode:compare")],
@@ -38,10 +35,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def response_keyboard(query_log_id: str) -> InlineKeyboardMarkup:
-    """Клавиатура сразу под ответом агента — только фидбек. Кнопки перехода к
-    следующему действию показываем отдельно, только после реакции 👍/👎 (см.
-    app/bot/handlers/feedback.py) — иначе бот одновременно спрашивает, помог ли
-    ответ, и предлагает начать заново, что путает и выглядит нелогично."""
+    # только фидбек; меню — после реакции, см. feedback.py
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="👍 Помогло", callback_data=f"feedback:up:{query_log_id}"),

@@ -25,22 +25,15 @@ from app.vectorstore.retriever import RetrievedChunk, retrieve
 TOP_K_PER_CATEGORY = 5
 
 DISCLAIMER_TEXT = (
-    "\n\n⚠️ Я стараюсь помочь и сэкономить вам время, но я всё ещё учусь — "
-    "ответ может быть неполным или неточным. Обязательно сверьте указанные "
-    "пункты в тексте нормативного акта (название источника указано выше) "
-    "перед принятием решения."
+    "\n\n⚠️ Ответ может быть неполным. Сверьте указанные пункты в тексте "
+    "нормативного акта (название источника выше), прежде чем опираться на него."
 )
 
-# Если пользователь укладывается в пару слов ("автомойка", "цветочный магазин"),
-# это почти наверняка уже готовый тип бизнеса — незачем тратить на него вызов LLM.
 MAX_WORDS_FOR_RAW_BUSINESS_TYPE = 3
 
 
 def normalize_business_type(state: AgentState) -> AgentState:
-    """Люди часто пишут не «автомойка», а целое предложение вроде «хочу построить
-    автомойку в Краснодаре, у меня уже есть такая в московской области». Эмбеддинг
-    такой фразы плохо похож на текст норматива, и retrieval ничего не находит.
-    Здесь просим LLM вытащить из фразы короткий тип бизнеса перед поиском."""
+    """Короткие названия оставляем; длинные фразы сжимаем через LLM перед retrieval."""
     raw_text = (state.get("business_type") or "").strip()
     if not raw_text or len(raw_text.split()) <= MAX_WORDS_FOR_RAW_BUSINESS_TYPE:
         return state
@@ -75,9 +68,7 @@ def understand_query(state: AgentState) -> AgentState:
 
 
 def _retrieve_for_region(business_type: str, region_code: str) -> list[RetrievedChunk]:
-    # один общий запрос "бизнес: требования" почти всегда вытягивает top_k чанков
-    # только про документы — они самые частотные в тексте норматива. Поэтому гоняем
-    # retrieval отдельно по каждой категории и потом склеиваем без дублей по id.
+    # по категориям отдельно — иначе top_k забивают чанки про «документы»
     found_ids: set[str] = set()
     result: list[RetrievedChunk] = []
 
@@ -99,8 +90,6 @@ def retrieve_chunks(state: AgentState) -> AgentState:
     chunks_a = _retrieve_for_region(business_type, state["region_a"])
     logger.info(f"регион A ({state['region_a']}): найдено {len(chunks_a)} чанков")
 
-    # федеральный СП подтягиваем всегда одним и тем же способом, независимо
-    # от режима — это фон, общий для любого региона (см. build_extraction_prompt)
     chunks_federal = _retrieve_for_region(business_type, FEDERAL_CODE)
     logger.info(f"федеральный уровень: найдено {len(chunks_federal)} чанков")
 
@@ -144,9 +133,6 @@ def classify_requirements(state: AgentState) -> AgentState:
     return new_state
 
 
-# TODO: одинаковые запросы (тот же бизнес + регион) сейчас каждый раз идут в LLM
-# заново — если бот наберёт трафик, стоит закешировать по (business_type, region)
-# хотя бы на день, ответ всё равно не меняется чаще, чем сами нормативы.
 def llm_compare_or_extract(state: AgentState) -> AgentState:
     if state.get("error"):
         return state
@@ -170,6 +156,7 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         except (LLMProviderError, LLMParsingError) as exc:
             logger.error(f"не удалось получить extraction от LLM: {exc}")
             return {**state, "error": str(exc)}
+        # коды/тип берём из запроса, не из ответа модели
         extraction = extraction.model_copy(
             update={
                 "region_code": state["region_a"],
@@ -193,9 +180,7 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
     except (LLMProviderError, LLMParsingError) as exc:
         logger.error(f"не удалось получить comparison от LLM: {exc}")
         return {**state, "error": str(exc)}
-    # модель иногда пишет в region_a/region_b человеческое имя вместо кода
-    # ("Новосибирская область") — тогда get_region в рендере падает с 500.
-    # Коды регионов нам уже известны из запроса пользователя, ими и пользуемся.
+    # коды/тип из запроса — модель иногда подставляет display_name и ломает рендер
     comparison = comparison.model_copy(
         update={
             "region_a": state["region_a"],
@@ -206,10 +191,6 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
     return {**state, "comparison": comparison}
 
 
-# Человеческие подписи вместо сырых имён категорий из классификатора —
-# "состав_проекта" сам по себе ничего не говорит обычному пользователю, поэтому
-# подпись расшифровываем: речь именно о том, что должно быть в проектной
-# документации, а не о требованиях к самому бизнесу.
 CATEGORY_LABELS: dict[str, str] = {
     "сроки": "⏱ Сроки",
     "документы": "📄 Необходимые документы",
@@ -220,9 +201,6 @@ CATEGORY_LABELS: dict[str, str] = {
 
 
 def _esc(text: str) -> str:
-    """Ответы собираем как HTML для Telegram (жирные заголовки и т.п.), а текст
-    внутри частично приходит от LLM — если там окажется "<" или "&" (например,
-    "высота < 50 м"), Telegram откажется отправлять всё сообщение целиком."""
     return html.escape(text, quote=False)
 
 
@@ -237,26 +215,21 @@ def _group_by_category(items: list) -> dict[str, list]:
     return groups
 
 
-# Пишем сами, а не просим LLM — так текст предсказуемый и не повторяет
-# слово в слово загрузочное сообщение бота ("Ищу требования для...").
 def _greeting_for_info(business_type: str, region_name: str) -> str:
     return (
         f"Я вас понял! Вы хотите открыть «{_esc(business_type)}» в {region_name} — "
-        f"с радостью помогу разобраться с требованиями."
+        f"ниже требования по нормативам."
     )
 
 
 def _greeting_for_comparison(business_type: str, region_a_name: str, region_b_name: str) -> str:
     return (
-        f"Я вас понял! Вы хотите сравнить требования для «{_esc(business_type)}»: "
-        f"{region_a_name} и {region_b_name} — с радостью помогу разобраться."
+        f"Я вас понял! Сравниваю требования для «{_esc(business_type)}»: "
+        f"{region_a_name} и {region_b_name}."
     )
 
 
 def _citation_suffix(citation: str, source_level: str) -> str:
-    # федеральную норму нельзя подписывать просто "(п. X)" — пункт X в СП
-    # 42.13330 и в региональном акте это совершенно разные документы, и без
-    # явной пометки пользователь не поймёт, где именно искать первоисточник
     if source_level == "федеральный":
         return f"(СП 42.13330.2016, п. {_esc(citation)})"
     return f"(п. {_esc(citation)})"
@@ -289,9 +262,6 @@ def _render_extraction(extraction: ExtractionResult) -> str:
                 for item in general_items:
                     lines.append(f"• {_esc(item.description)} {_citation_suffix(item.citation, item.source_level)}")
         else:
-            # специальных норм под этот бизнес нет — но нашлось что-то общее,
-            # применимое к нему. Раньше в этом случае категория просто пропадала
-            # из ответа, и выглядело так, будто бот вообще не искал по ней
             lines.append(
                 f"Специальных требований к «{_esc(extraction.business_type)}» здесь нет, "
                 f"но применяются общие нормы:"

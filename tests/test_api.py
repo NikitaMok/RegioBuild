@@ -5,9 +5,7 @@ from fastapi.testclient import TestClient
 from app.api.main import app
 from app.core.regions import REGIONS
 
-# LLM и векторный индекс в тестах не поднимаем — на уровне API нас интересует
-# HTTP-контракт (валидация, коды ответа, проксирование query_log_id), а не
-# качество самого агента, для этого есть app/eval/answer_eval.py.
+# только HTTP-контракт; качество агента — в app/eval/
 client = TestClient(app)
 
 

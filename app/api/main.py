@@ -14,9 +14,7 @@ from app.vectorstore.chroma_store import get_chroma_store
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # на Bothost первый /compare иначе грузит модель под запросом и ловит 502
-    # (прокси рвёт соединение / OOM). Прогреваем при старте — падение будет
-    # видно в логах сразу, а не в середине диалога с пользователем.
+    # иначе первый запрос тянет модель и ловит 502 на Bothost
     logger.info("прогрев embedder + chroma...")
     embedder = get_embedder()
     store = get_chroma_store()

@@ -36,13 +36,7 @@ def _download(url: str, timeout: int = 20) -> bytes:
 
 
 def fetch_region_document(doc: RegionDocument, force: bool = False) -> Path:
-    """Скачивает нормативный документ и возвращает путь к локальной копии.
-
-    Правовые сайты (meganorm.ru, docs.cntd.ru и т.п.) не всегда пускают ботов,
-    поэтому если скачать не удалось — файл можно положить руками в data/raw
-    под именем из doc.local_raw_filename, и пайплайн подхватит его при
-    следующем запуске.
-    """
+    """Скачивает документ в data/raw. При 403/капче положите файл вручную."""
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     local_path = RAW_DIR / doc.local_raw_filename
 
@@ -59,9 +53,7 @@ def fetch_region_document(doc: RegionDocument, force: bool = False) -> Path:
             f"Сохраните страницу/файл вручную как {local_path} и запустите пайплайн ещё раз."
         ) from exc
 
-    # .docx — это zip-архив (сигнатура PK), а по прямой ссылке на скачивание сайт
-    # иногда вместо файла отдаёт html-страницу (редирект, форма подтверждения и т.п.).
-    # Лучше явно на это указать, чем дать python-docx упасть с непонятной ошибкой позже.
+    # сайт иногда отдаёт HTML вместо файла (docx = zip, сигнатура PK)
     if doc.fetch_format == "docx" and not content.startswith(b"PK"):
         raise FetchError(
             f"по ссылке {doc.source_url} для региона '{doc.code}' пришёл не .docx-файл "

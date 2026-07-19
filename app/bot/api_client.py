@@ -1,4 +1,4 @@
-"""Клиент бота к backend (Bot -> API -> Agent, см. схему в README)."""
+"""HTTP-клиент бота к FastAPI."""
 
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ class AgentAnswer:
 
 async def _post(path: str, payload: dict) -> dict:
     settings = get_settings()
-    # compare/info могут долго ждать LLM; на Bothost ещё и холодный старт модели
     async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=180) as client:
         try:
             response = await client.post(path, json=payload)
@@ -48,6 +47,4 @@ async def send_feedback(query_log_id: str, vote: str) -> None:
     try:
         await _post("/feedback", {"query_log_id": query_log_id, "vote": vote})
     except ApiClientError:
-        # фидбек — вспомогательная штука, если backend не принял его,
-        # не хотим ломать пользователю остальной диалог с ботом
         pass

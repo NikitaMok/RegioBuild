@@ -10,8 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
-    # переменные окружения (Bothost-панель) важнее локального .env —
-    # иначе на хостинге можно залипнуть на старом API_BASE_URL из файла
+    # env из окружения/панели перекрывает значения из .env
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -24,9 +23,7 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = str(BASE_DIR / "data" / "chroma")
     chroma_collection: str = "rngp_requirements"
 
-    # MiniLM вместо mpnet-base: на Bothost Basic (~1 ГБ RAM) тяжёлая модель
-    # убивает процесс при первом /compare (502). На русском MiniLM чуть слабее
-    # по качеству retrieval, но реально влезает в память вместе с FastAPI/Chroma.
+    # MiniLM: mpnet на ~1 ГБ RAM (Bothost Basic) не влезал
     embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
     llm_provider: Literal["gigachat", "yandexgpt"] = "gigachat"
@@ -34,8 +31,7 @@ class Settings(BaseSettings):
     gigachat_credentials: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"
     gigachat_model: str = "GigaChat-2-Pro"
-    # у GigaChat самоподписанный сертификат НУЦ Минцифры, без этого флага
-    # requests падает на SSL до тех пор, пока не поставишь корневой сертификат руками
+    # у GigaChat свой корень НУЦ — без флага SSL-проверка падает
     gigachat_verify_ssl_certs: bool = False
 
     yandex_api_key: str = ""
@@ -50,7 +46,6 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
-    # список регионов живёт в app/core/regions.py — дублировать его здесь незачем
     requirement_categories: tuple[str, ...] = (
         "сроки",
         "документы",

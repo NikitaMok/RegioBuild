@@ -1,12 +1,6 @@
-# Отдельный образ специально для Bothost: платформа деплоит один Dockerfile
-# из корня репозитория и не понимает docker-compose, поэтому здесь нельзя
-# просто взять Dockerfile.api/Dockerfile.bot из локальной сборки — Bothost их
-# не найдёт. Вместо этого один и тот же образ используется для ДВУХ ботов в
-# панели Bothost (api и telegram-bot), а какой процесс запускать внутри —
-# решает переменная окружения SERVICE_ROLE (см. entrypoint.sh и README).
-#
-# Для локальной разработки и docker-compose используй Dockerfile.api /
-# Dockerfile.bot — этот файл существует только ради Bothost.
+# Общий образ для Bothost (платформа берёт только корневой Dockerfile).
+# Роль процесса — SERVICE_ROLE=api|bot, см. entrypoint.sh.
+# Локально удобнее Dockerfile.api / Dockerfile.bot.
 FROM python:3.11-slim
 
 WORKDIR /srv/app
@@ -22,8 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-# скачиваем веса эмбеддера на этапе сборки — иначе первый запрос на Bothost
-# тянет модель с HuggingFace под прокси и часто заканчивается 502
+# веса на этапе сборки — иначе первый запрос качает модель с HF и часто 502
 RUN python -c "from sentence_transformers import SentenceTransformer; \
 SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
 

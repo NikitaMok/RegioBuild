@@ -13,12 +13,7 @@ def log_query(
     response_text: str,
     region_b: str | None = None,
 ) -> str | None:
-    """Пишем историю запросов для аналитики и подбора кейсов в eval-датасет.
-
-    Возвращаем id записи, чтобы бот мог позже привязать к ней фидбек
-    пользователя (👍/👎). Если БД недоступна — это не должно ронять ответ
-    пользователю, поэтому ошибку только логируем и возвращаем None.
-    """
+    """Пишет запрос в query_logs. При ошибке БД — None, ответ пользователю не роняем."""
     try:
         with get_session() as session:
             query_log = QueryLog(
@@ -37,8 +32,7 @@ def log_query(
 
 
 def save_feedback(query_log_id: str, vote: str) -> bool:
-    """Отмечаем, помог ли ответ пользователю. Возвращает False, если записи
-    с таким id не нашлось (например, лог не сохранился с первого раза)."""
+    """Сохраняет 👍/👎. False, если записи с таким id нет."""
     try:
         with get_session() as session:
             query_log = session.get(QueryLog, query_log_id)

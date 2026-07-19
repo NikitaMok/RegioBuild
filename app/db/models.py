@@ -42,16 +42,14 @@ class Chunk(Base):
     category: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     char_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    # id вектора в Chroma — совпадает с id чанка, храним отдельно на случай,
-    # если в будущем понадобится переиндексация без пересоздания чанков
-    vector_id: Mapped[str] = mapped_column(String(36), nullable=True, index=True)
+    vector_id: Mapped[str] = mapped_column(String(36), nullable=True, index=True)  # id в Chroma
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     document: Mapped["Document"] = relationship(back_populates="chunks")
 
 
 class QueryLog(Base):
-    """История запросов к боту — для аналитики и подбора кейсов в eval-датасет."""
+    """Лог запросов и фидбека."""
 
     __tablename__ = "query_logs"
 

@@ -120,8 +120,6 @@ def test_citation_suffix_marks_federal_source_explicitly() -> None:
 
 
 def test_render_extraction_marks_federal_fallback_item() -> None:
-    # регион молчит по вопросу, но в федеральном СП нашлась применимая норма —
-    # это лучше, чем оставить категорию пустой, но источник нужно явно назвать
     extraction = ExtractionResult(
         region_code="moscow_oblast",
         business_type="склад",
@@ -141,8 +139,6 @@ def test_render_extraction_marks_federal_fallback_item() -> None:
 
 
 def test_render_extraction_flags_general_norms_when_no_specific_ones_found() -> None:
-    # склад буквально не упомянут в норме, но норма всё равно применима —
-    # раньше в этом случае категория просто пропадала из ответа
     extraction = ExtractionResult(
         region_code="moscow_oblast",
         business_type="склад",
@@ -228,7 +224,7 @@ def test_format_response_appends_disclaimer_on_success() -> None:
         "extraction": ExtractionResult(region_code="moscow_oblast", business_type="склад", items=[]),
     }
     result = nodes.format_response(state)
-    assert "учусь" in result["response_text"]
+    assert "Ответ может быть неполным" in result["response_text"]
 
 
 def test_format_response_shows_normalized_business_type_prefix() -> None:

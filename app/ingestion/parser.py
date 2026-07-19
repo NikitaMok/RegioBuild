@@ -13,9 +13,7 @@ from docx.text.paragraph import Paragraph
 # Пункты РНГП нумеруются в начале строки: "1.", "2.3", "4.5.2." и т.д.
 SECTION_NUMBER_PATTERN = re.compile(r"^(\d{1,3}(?:\.\d{1,3}){0,4})\.?\s+(\S.*)$")
 
-# Некоторые сайты (meganorm.ru) отдают XHTML с прологом <?xml ...?> в начале —
-# из-за него bs4 пытается угадать XML и ругается warning'ом, хотя дальше это
-# обычный HTML. Пролог для извлечения текста не нужен, поэтому просто срезаем его.
+# meganorm отдаёт XHTML с <?xml ...?> — bs4 ругается, пролог срезаем
 XML_PROLOG_PATTERN = re.compile(rb"^\s*<\?xml[^>]*\?>\s*")
 
 TAGS_TO_DROP = ("script", "style", "nav", "header", "footer", "noscript", "form")
@@ -41,13 +39,7 @@ def extract_text_from_html(html: bytes | str) -> str:
 
 
 def split_into_sections(text: str, min_section_chars: int = 40) -> list[Section]:
-    """Разбивает текст документа на пронумерованные пункты.
-
-    Строки без номера в начале считаются продолжением текущего пункта
-    (обычная ситуация — перенос строки посреди предложения или таблица).
-    Текст до первого найденного номера (шапка, преамбула) отбрасывается,
-    если он короче min_section_chars.
-    """
+    """Разбивает текст на пронумерованные пункты; строки без номера — продолжение текущего."""
     sections: list[Section] = []
     current_number: str | None = None
     current_lines: list[str] = []
@@ -73,9 +65,7 @@ def split_into_sections(text: str, min_section_chars: int = 40) -> list[Section]
 
 
 def _iter_body_blocks(document: Document):
-    """python-docx не даёт параграфы и таблицы одним потоком в порядке документа,
-    приходится обходить XML body вручную — иначе таблицы (а в РНГП именно в них
-    указаны конкретные нормативные показатели) выпадут из текста."""
+    """Обход body вручную: иначе python-docx теряет таблицы."""
     for child in document.element.body.iterchildren():
         if child.tag == qn("w:p"):
             yield Paragraph(child, document)

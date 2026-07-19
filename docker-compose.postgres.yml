@@ -1,7 +1,4 @@
-# Вариант с полноценным Postgres — на случай, если хочется локально погонять
-# миграции и логи фидбека против настоящей БД, а не SQLite. Для прода не
-# нужен: retrieval у бота идёт целиком через Chroma, Postgres тут только
-# для query_logs (см. docker-compose.yml и комментарий в config.py).
+# Локальный Postgres вместо SQLite. Для прода не нужен — retrieval через Chroma.
 services:
   postgres:
     image: postgres:16-alpine

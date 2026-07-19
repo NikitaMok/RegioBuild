@@ -20,7 +20,4 @@ COPY alembic.ini .
 
 EXPOSE 8000
 
-# PORT приходит от хостинга (Bothost и т.п.), локально по умолчанию 8000.
-# Миграции гоняем при каждом старте контейнера — на PaaS никто руками
-# alembic upgrade head не запустит, а автообновление по git-пушу это подразумевает.
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

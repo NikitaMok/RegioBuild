@@ -15,9 +15,7 @@ class AgentState(TypedDict, total=False):
 
     retrieved_a: list[RetrievedChunk]
     retrieved_b: list[RetrievedChunk]
-    # федеральный слой (СП 42.13330.2016) — общий фон для любого региона,
-    # подтягивается один раз независимо от mode (см. retrieve_chunks в nodes.py)
-    retrieved_federal: list[RetrievedChunk]
+    retrieved_federal: list[RetrievedChunk]  # СП 42.13330.2016
 
     extraction: Optional[ExtractionResult]
     comparison: Optional[ComparisonResult]

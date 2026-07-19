@@ -1,8 +1,7 @@
 """Запуск: python -m app.ingestion.pipeline
 
-Прогоняет все регионы из REGIONS плюс федеральный СП 42.13330.2016 через
-скрапинг -> парсинг -> чанкинг и сохраняет результат и в JSONL (для дебага),
-и в Postgres (для дальнейшей индексации).
+Скрапинг → парсинг → чанкинг по REGIONS + федеральный СП.
+Результат — в JSONL и в Postgres.
 """
 
 from __future__ import annotations
@@ -41,10 +40,7 @@ def _save_chunks_as_jsonl(region_code: str, chunks: list) -> Path:
 
 
 def _prune_removed_regions(known_codes: set[str]) -> None:
-    """Если регион убрали из REGIONS (как Ленинградскую область — источник
-    оказался без реального текста норматива), его старые чанки сами по себе
-    из БД не денутся и попадут в Chroma при следующей переиндексации. Чистим
-    их здесь, а не оставляем как мёртвый груз."""
+    """Удаляет из БД регионы, которых больше нет в REGIONS."""
     with get_session() as session:
         stale_ids = session.scalars(
             select(DocumentRow.id).where(DocumentRow.region_code.not_in(known_codes))
@@ -84,8 +80,7 @@ def run_pipeline(force_download: bool = False) -> None:
         logger.info(f"[{region_code}] сохранено в {processed_path}")
 
         with get_session() as session:
-            # без этого повторный запуск пайплайна плодил бы дубликаты при каждом
-            # перезапуске (например, после смены источника документа для региона)
+            # иначе при повторном прогоне копятся дубликаты
             old_document_ids = session.scalars(
                 select(DocumentRow.id).where(DocumentRow.region_code == region_code)
             ).all()
