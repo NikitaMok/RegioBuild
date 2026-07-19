@@ -7,10 +7,16 @@ venv/
 env/
 .pytest_cache/
 
-# Env / secrets
+# Env / secrets — в git только шаблон .env.example, всё остальное с
+# реальными токенами/кредами остаётся локально (включая bothost-*.env
+# для панели хостинга и любые .env.* копии).
 .env
+.env.*
+!.env.example
 *.env.local
 bothost-*.env
+*credentials*
+*secrets*
 
 # Data artifacts (регенерируются локально пайплайном, в git не нужны —
 # кроме готового Chroma-индекса и классификатора, см. блок исключений внизу)
