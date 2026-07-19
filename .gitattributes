@@ -1,0 +1,5 @@
+# На Windows git может закоммитить entrypoint.sh с CRLF, если autocrlf
+# настроен иначе, чем ожидается — тогда shebang в Linux-контейнере на
+# Bothost сломается с непонятной ошибкой "no such file or directory".
+# Форсируем LF независимо от локальных настроек git.
+*.sh text eol=lf

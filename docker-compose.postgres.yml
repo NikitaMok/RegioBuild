@@ -1,0 +1,51 @@
+# Вариант с полноценным Postgres — на случай, если хочется локально погонять
+# миграции и логи фидбека против настоящей БД, а не SQLite. Для прода не
+# нужен: retrieval у бота идёт целиком через Chroma, Postgres тут только
+# для query_logs (см. docker-compose.yml и комментарий в config.py).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-regiobuild}
+      POSTGRES_USER: ${POSTGRES_USER:-regiobuild}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-regiobuild}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/srv/app/data
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - api
+    volumes:
+      - ./data:/srv/app/data
+
+volumes:
+  pgdata:

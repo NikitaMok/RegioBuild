@@ -1,0 +1,50 @@
+# Основной compose-файл — то, что реально крутится в проде на хостинге
+# (Bothost и аналогичные), но без проблем поднимается и локально.
+#
+#   - без отдельного контейнера Postgres: retrieval целиком идёт через Chroma,
+#     а SQL-база в проекте нужна только для лога фидбека (👍/👎), поэтому
+#     хватает SQLite-файла в персистентном volume;
+#   - секреты не коммитим — они приходят через переменные окружения хоста
+#     (локально это .env + `docker compose --env-file .env up`, на Bothost —
+#     переменные из его панели управления, docker-compose подхватывает их
+#     одинаково через ${VAR});
+#   - готовый Chroma-индекс и обученный классификатор запечены в образ на
+#     этапе build (см. .gitignore и Dockerfile.api) — контейнер их не
+#     пересобирает при каждом старте.
+#
+# Если нужен вариант с полноценным Postgres (например, чтобы локально
+# погонять миграции против него) — см. docker-compose.postgres.yml.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: sqlite:////srv/app/state/regiobuild.db
+      LLM_PROVIDER: ${LLM_PROVIDER:-gigachat}
+      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Pro}
+      GIGACHAT_VERIFY_SSL_CERTS: ${GIGACHAT_VERIFY_SSL_CERTS:-false}
+      YANDEX_API_KEY: ${YANDEX_API_KEY:-}
+      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:-}
+      YANDEX_MODEL: ${YANDEX_MODEL:-yandexgpt/latest}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - app_state:/srv/app/state
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?нужно задать переменную TELEGRAM_BOT_TOKEN}
+      API_BASE_URL: http://api:8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      - api
+
+volumes:
+  app_state:
