@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = str(BASE_DIR / "data" / "chroma")
     chroma_collection: str = "rngp_requirements"
 
-    # paraphrase-multilingual, а не обычный MiniLM — весь корпус на русском,
-    # и на чисто английских моделях сходство запросов к нормативам заметно хуже.
-    embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    # MiniLM вместо mpnet-base: на Bothost Basic (~1 ГБ RAM) тяжёлая модель
+    # убивает процесс при первом /compare (502). На русском MiniLM чуть слабее
+    # по качеству retrieval, но реально влезает в память вместе с FastAPI/Chroma.
+    embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
     llm_provider: Literal["gigachat", "yandexgpt"] = "gigachat"
 

@@ -21,7 +21,8 @@ class AgentAnswer:
 
 async def _post(path: str, payload: dict) -> dict:
     settings = get_settings()
-    async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=60) as client:
+    # compare/info могут долго ждать LLM; на Bothost ещё и холодный старт модели
+    async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=180) as client:
         try:
             response = await client.post(path, json=payload)
             response.raise_for_status()

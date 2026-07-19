@@ -22,6 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# скачиваем веса эмбеддера на этапе сборки — иначе первый запрос на Bothost
+# тянет модель с HuggingFace под прокси и часто заканчивается 502
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
+
 COPY app ./app
 COPY data ./data
 COPY migrations ./migrations
