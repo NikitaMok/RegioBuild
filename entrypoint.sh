@@ -9,7 +9,11 @@ if [ "$SERVICE_ROLE" = "bot" ]; then
     exec python -m app.bot.main
 fi
 
-alembic upgrade head
+# миграции не должны глушить весь контейнер, если схема уже на месте
+if ! alembic upgrade head; then
+    echo "WARNING: alembic upgrade head failed — starting api anyway"
+fi
+
 # PORT должен совпадать с «Порт веб-приложения» в панели Bothost
 echo "starting api on 0.0.0.0:${PORT:-8000} (SERVICE_ROLE=${SERVICE_ROLE:-api})"
 exec uvicorn app.api.main:app --host 0.0.0.0 --port "${PORT:-8000}"

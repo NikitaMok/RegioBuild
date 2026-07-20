@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,17 +9,26 @@ from loguru import logger
 from app.api.routes import compare, feedback, info
 from app.api.schemas import RegionInfo, RegionsResponse
 from app.core.regions import REGIONS
-from app.embeddings.embedder import get_embedder
-from app.vectorstore.chroma_store import get_chroma_store
+
+
+def _warmup_models() -> None:
+    # в фоне: иначе на Bothost uvicorn не успевает открыть порт, пока грузится MiniLM
+    try:
+        from app.embeddings.embedder import get_embedder
+        from app.vectorstore.chroma_store import get_chroma_store
+
+        logger.info("прогрев embedder + chroma...")
+        embedder = get_embedder()
+        store = get_chroma_store()
+        logger.info(f"embedder готов ({embedder.model_name}), векторов в chroma: {store.count()}")
+    except Exception:
+        logger.exception("прогрев embedder/chroma не удался — API всё равно слушает порт")
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # иначе первый запрос тянет модель и ловит 502 на Bothost
-    logger.info("прогрев embedder + chroma...")
-    embedder = get_embedder()
-    store = get_chroma_store()
-    logger.info(f"embedder готов ({embedder.model_name}), векторов в chroma: {store.count()}")
+    thread = threading.Thread(target=_warmup_models, name="warmup-embedder", daemon=True)
+    thread.start()
     yield
 
 
