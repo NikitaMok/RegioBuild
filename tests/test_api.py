@@ -28,10 +28,11 @@ def test_info_rejects_unknown_region() -> None:
 
 
 def test_info_returns_agent_answer_with_query_log_id(monkeypatch) -> None:
+    import app.agent.graph as agent_graph
     import app.api.routes.info as info_route
 
     monkeypatch.setattr(
-        info_route,
+        agent_graph,
         "run_info_query",
         lambda business_type, region_code: {"response_text": "готовый ответ", "error": None},
     )
@@ -46,12 +47,12 @@ def test_info_returns_agent_answer_with_query_log_id(monkeypatch) -> None:
 
 
 def test_info_returns_500_when_agent_raises(monkeypatch) -> None:
-    import app.api.routes.info as info_route
+    import app.agent.graph as agent_graph
 
     def _raise(*args, **kwargs):
         raise RuntimeError("векторный индекс недоступен")
 
-    monkeypatch.setattr(info_route, "run_info_query", _raise)
+    monkeypatch.setattr(agent_graph, "run_info_query", _raise)
 
     response = client.post("/info", json={"business_type": "кафе", "region_code": "moscow_oblast"})
     assert response.status_code == 500
@@ -74,12 +75,13 @@ def test_compare_rejects_unknown_region() -> None:
 
 
 def test_compare_returns_agent_answer(monkeypatch) -> None:
+    import app.agent.graph as agent_graph
     import app.api.routes.compare as compare_route
 
     monkeypatch.setattr(
-        compare_route,
+        agent_graph,
         "run_compare_query",
-        lambda business_type, region_a_code, region_b_code: {"response_text": "сравнение готово", "error": None},
+        lambda business_type, region_a, region_b: {"response_text": "сравнение готово", "error": None},
     )
     monkeypatch.setattr(compare_route, "log_query", lambda **kwargs: "log-id-456")
 
