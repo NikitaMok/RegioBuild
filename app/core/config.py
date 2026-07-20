@@ -46,6 +46,8 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    daily_query_limit: int = 30
+
     requirement_categories: tuple[str, ...] = (
         "сроки",
         "документы",

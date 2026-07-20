@@ -7,6 +7,7 @@ from dataclasses import dataclass
 class RegionDocument:
     code: str
     display_name: str
+    name_locative: str  # «в Краснодарском крае»
     document_title: str
     source_url: str
     local_raw_filename: str
@@ -18,6 +19,7 @@ REGIONS: dict[str, RegionDocument] = {
     "moscow_oblast": RegionDocument(
         code="moscow_oblast",
         display_name="Московская область",
+        name_locative="Московской области",
         document_title=(
             "Постановление Правительства МО от 17.08.2015 N 713/30 "
             '"Об утверждении нормативов градостроительного проектирования Московской области"'
@@ -30,6 +32,7 @@ REGIONS: dict[str, RegionDocument] = {
     "krasnodar_krai": RegionDocument(
         code="krasnodar_krai",
         display_name="Краснодарский край",
+        name_locative="Краснодарском крае",
         document_title=(
             "Приказ департамента по архитектуре и градостроительству Краснодарского края "
             'от 16.04.2015 N 78 "Об утверждении нормативов градостроительного проектирования '
@@ -44,6 +47,7 @@ REGIONS: dict[str, RegionDocument] = {
     "sverdlovsk_oblast": RegionDocument(
         code="sverdlovsk_oblast",
         display_name="Свердловская область",
+        name_locative="Свердловской области",
         document_title=(
             "Приказ Министерства строительства и развития инфраструктуры Свердловской "
             'области от 01.08.2023 N 435-П "Об утверждении региональных нормативов '
@@ -58,6 +62,7 @@ REGIONS: dict[str, RegionDocument] = {
     "novosibirsk_oblast": RegionDocument(
         code="novosibirsk_oblast",
         display_name="Новосибирская область",
+        name_locative="Новосибирской области",
         document_title=(
             "Постановление Правительства Новосибирской области от 12.08.2015 N 303-п "
             '"Об утверждении региональных нормативов градостроительного проектирования '
@@ -71,6 +76,7 @@ REGIONS: dict[str, RegionDocument] = {
     "tatarstan": RegionDocument(
         code="tatarstan",
         display_name="Республика Татарстан",
+        name_locative="Республике Татарстан",
         document_title=(
             "Постановление Кабинета Министров Республики Татарстан от 27.12.2013 N 1071 "
             '"Об утверждении республиканских нормативов градостроительного проектирования '
@@ -90,6 +96,7 @@ FEDERAL_CODE = "federal"
 FEDERAL_DOCUMENT = RegionDocument(
     code=FEDERAL_CODE,
     display_name="Российская Федерация (федеральный уровень)",
+    name_locative="Российской Федерации",
     document_title=(
         'СП 42.13330.2016 "Градостроительство. Планировка и застройка городских '
         'и сельских поселений" (актуализированная редакция СНиП 2.07.01-89*)'

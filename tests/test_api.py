@@ -101,11 +101,18 @@ def test_feedback_for_missing_query_log_returns_404(monkeypatch) -> None:
     assert response.status_code == 404
 
 
-def test_feedback_success(monkeypatch) -> None:
-    import app.api.routes.feedback as feedback_route
+def test_info_returns_429_when_daily_limit_exceeded(monkeypatch) -> None:
+    import app.api.routes.info as info_route
+    from app.api.rate_limit import RateLimitExceeded
 
-    monkeypatch.setattr(feedback_route, "save_feedback", lambda query_log_id, vote: True)
+    def _raise_limit(telegram_user_id: str | None) -> None:
+        raise RateLimitExceeded(30)
 
-    response = client.post("/feedback", json={"query_log_id": "some-id", "vote": "down"})
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    monkeypatch.setattr(info_route, "ensure_within_daily_limit", _raise_limit)
+
+    response = client.post(
+        "/info",
+        json={"business_type": "кафе", "region_code": "moscow_oblast", "telegram_user_id": "42"},
+    )
+    assert response.status_code == 429
+    assert "лимит" in response.json()["detail"].lower()

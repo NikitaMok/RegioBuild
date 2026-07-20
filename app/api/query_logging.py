@@ -12,6 +12,7 @@ def log_query(
     business_type: str,
     response_text: str,
     region_b: str | None = None,
+    telegram_user_id: str | None = None,
 ) -> str | None:
     """Пишет запрос в query_logs. При ошибке БД — None, ответ пользователю не роняем."""
     try:
@@ -22,6 +23,7 @@ def log_query(
                 region_b=region_b,
                 business_type=business_type,
                 answer=response_text,
+                telegram_user_id=telegram_user_id,
             )
             session.add(query_log)
             session.flush()

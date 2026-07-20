@@ -10,12 +10,14 @@ from app.core.regions import REGIONS
 class InfoRequest(BaseModel):
     business_type: str = Field(min_length=2, max_length=200, examples=["кафе"])
     region_code: str = Field(examples=list(REGIONS.keys()))
+    telegram_user_id: str | None = Field(default=None, max_length=64)
 
 
 class CompareRequest(BaseModel):
     business_type: str = Field(min_length=2, max_length=200, examples=["кафе"])
     region_a: str = Field(examples=list(REGIONS.keys()))
     region_b: str = Field(examples=list(REGIONS.keys()))
+    telegram_user_id: str | None = Field(default=None, max_length=64)
 
 
 class AgentResponse(BaseModel):

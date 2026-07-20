@@ -4,7 +4,7 @@ from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
-from app.llm.base import LLMProvider, LLMProviderError
+from app.llm.base import DEFAULT_MAX_TOKENS, LLMProvider, LLMProviderError
 
 
 class YandexGPTProvider(LLMProvider):
@@ -22,12 +22,21 @@ class YandexGPTProvider(LLMProvider):
         self._model = settings.yandex_model
 
     @retry(reraise=True, stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=8))
-    def complete(self, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+    ) -> str:
         from yandex_cloud_ml_sdk import YCloudML
 
         try:
             sdk = YCloudML(folder_id=self._folder_id, auth=self._api_key)
-            model = sdk.models.completions(self._model).configure(temperature=temperature)
+            model = sdk.models.completions(self._model).configure(
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
             result = model.run([
                 {"role": "system", "text": system_prompt},
                 {"role": "user", "text": user_prompt},

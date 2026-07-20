@@ -10,10 +10,17 @@ from aiogram.types import CallbackQuery, Message
 
 from app.bot.api_client import ApiClientError, request_compare
 from app.bot.keyboards import cancel_keyboard, main_menu_keyboard, region_keyboard, response_keyboard
+from app.bot.messaging import answer_html_chunks
 from app.bot.states import CompareFlow
+from app.core.business_type import looks_like_business_query
 from app.core.regions import get_region
 
 router = Router(name="compare_mode")
+
+INVALID_BUSINESS_REPLY = (
+    "Не похоже на тип бизнеса для нормативов. Напишите коротко, например: "
+    "кафе, автомойка, склад, медицинский центр."
+)
 
 
 @router.callback_query(F.data == "mode:compare")
@@ -28,7 +35,12 @@ async def start_compare_flow(callback: CallbackQuery, state: FSMContext) -> None
 
 @router.message(CompareFlow.waiting_business_type)
 async def receive_business_type(message: Message, state: FSMContext) -> None:
-    await state.update_data(business_type=message.text.strip())
+    business_type = (message.text or "").strip()
+    if not looks_like_business_query(business_type):
+        await message.answer(INVALID_BUSINESS_REPLY, reply_markup=cancel_keyboard())
+        return
+
+    await state.update_data(business_type=business_type)
     await state.set_state(CompareFlow.waiting_region_a)
     await message.answer("Выберите первый регион:", reply_markup=region_keyboard("region_a"))
 
@@ -53,6 +65,7 @@ async def receive_region_b(callback: CallbackQuery, state: FSMContext) -> None:
     region_a = data["region_a"]
     region_a_name = get_region(region_a).display_name
     region_b_name = get_region(region_b).display_name
+    telegram_user_id = str(callback.from_user.id) if callback.from_user else None
 
     await callback.message.edit_text(
         f"Сравниваю требования для «{html.escape(business_type)}»: "
@@ -61,11 +74,16 @@ async def receive_region_b(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
     try:
-        answer = await request_compare(business_type, region_a, region_b)
+        answer = await request_compare(
+            business_type,
+            region_a,
+            region_b,
+            telegram_user_id=telegram_user_id,
+        )
     except ApiClientError as exc:
         await callback.message.answer(f"⚠️ {exc}", reply_markup=main_menu_keyboard())
     else:
         keyboard = response_keyboard(answer.query_log_id) if answer.query_log_id else main_menu_keyboard()
-        await callback.message.answer(answer.response_text, reply_markup=keyboard)
+        await answer_html_chunks(callback.message, answer.response_text, reply_markup=keyboard)
 
     await state.clear()
