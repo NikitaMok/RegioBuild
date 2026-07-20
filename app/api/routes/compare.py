@@ -3,7 +3,6 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
-from app.agent.graph import run_compare_query
 from app.api.query_logging import log_query
 from app.api.rate_limit import RateLimitExceeded, ensure_within_daily_limit
 from app.api.schemas import AgentResponse, CompareRequest
@@ -30,6 +29,8 @@ def compare_regions(payload: CompareRequest) -> AgentResponse:
         ) from exc
 
     try:
+        from app.agent.graph import run_compare_query
+
         agent_state = run_compare_query(payload.business_type, payload.region_a, payload.region_b)
     except Exception as exc:
         logger.exception("агент упал с необработанным исключением")

@@ -12,7 +12,6 @@ from app.core.regions import REGIONS
 
 
 def _warmup_models() -> None:
-    # в фоне: иначе на Bothost uvicorn не успевает открыть порт, пока грузится MiniLM
     try:
         from app.embeddings.embedder import get_embedder
         from app.vectorstore.chroma_store import get_chroma_store
@@ -27,6 +26,7 @@ def _warmup_models() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # порт уже открыт; модель грузим после, чтобы /health не таймаутился
     thread = threading.Thread(target=_warmup_models, name="warmup-embedder", daemon=True)
     thread.start()
     yield
