@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
+from loguru import logger
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
@@ -32,9 +33,14 @@ def count_user_queries_today(telegram_user_id: str) -> int:
 
 
 def ensure_within_daily_limit(telegram_user_id: str | None) -> None:
-    """Без user_id лимит не проверяем (локальные/тестовые вызовы)."""
+    """Без user_id лимит не проверяем. Ошибка БД не должна ронять запрос."""
     if not telegram_user_id:
         return
     limit = get_settings().daily_query_limit
-    if count_user_queries_today(telegram_user_id) >= limit:
+    try:
+        used = count_user_queries_today(telegram_user_id)
+    except Exception as exc:
+        logger.warning(f"не удалось проверить лимит запросов: {exc}")
+        return
+    if used >= limit:
         raise RateLimitExceeded(limit)

@@ -27,8 +27,6 @@ class Settings(BaseSettings):
     embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
     llm_provider: Literal["gigachat", "yandexgpt"] = "gigachat"
-    # при ошибке/лимите основного провайдера пробовать второй (если есть креды)
-    llm_fallback_enabled: bool = True
 
     gigachat_credentials: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"
