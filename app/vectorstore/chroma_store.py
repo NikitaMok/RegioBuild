@@ -53,8 +53,12 @@ class ChromaStore:
     def count(self) -> int:
         return self._collection.count()
 
-    def has_section(self, region_code: str, section_number: str) -> bool:
-        """Есть ли в коллекции чанк с данным region_code + section_number."""
+    def get_section(
+        self,
+        region_code: str,
+        section_number: str,
+    ) -> tuple[list[str], list[str]]:
+        """Вернуть (ids, documents) для region_code + section_number."""
         try:
             result = self._collection.get(
                 where={
@@ -63,13 +67,23 @@ class ChromaStore:
                         {"section_number": section_number},
                     ]
                 },
-                limit=1,
-                include=["metadatas"],
+                include=["documents"],
             )
         except Exception:
-            return False
-        ids = result.get("ids") or []
-        return len(ids) > 0
+            return [], []
+        ids = list(result.get("ids") or [])
+        documents = list(result.get("documents") or [])
+        return ids, documents
+
+    def has_section(self, region_code: str, section_number: str) -> bool:
+        """Есть ли в коллекции чанк с данным region_code + section_number."""
+        ids, _ = self.get_section(region_code, section_number)
+        return bool(ids)
+
+    def delete_ids(self, ids: list[str]) -> None:
+        if not ids:
+            return
+        self._collection.delete(ids=ids)
 
 
 @lru_cache

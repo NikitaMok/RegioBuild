@@ -38,17 +38,16 @@ from app.llm.schemas import CommonRequirementItem, ComparisonResult, ExtractionR
 from app.vectorstore.types import RetrievedChunk
 from app.vectorstore.retriever import retrieve
 
-TOP_K_PER_QUERY = 4
-MAX_CHUNKS_PER_REGION = 10
-MAX_FEDERAL_CHUNKS = 8
+TOP_K_PER_QUERY = 3
+MAX_CHUNKS_PER_REGION = 8
+MAX_FEDERAL_CHUNKS = 6
 
 # меньше запросов к эмбеддеру/Chroma → быстрее и дешевле по токенам LLM
 _RETRIEVAL_QUERY_TEMPLATES: tuple[str, ...] = (
     "{bt}",
     "{bt} размещение парковка машино-места",
-    "{bt} пожарная безопасность",
+    "{bt} пожарная безопасность 123-ФЗ",
     "{bt} санитарно-защитная зона СанПиН",
-    "{bt} градостроительные требования",
 )
 
 DISCLAIMER_TEXT = (
@@ -400,15 +399,15 @@ def _group_by_category(items: list) -> dict[str, list]:
 
 def _greeting_for_info(business_type: str, region_locative: str) -> str:
     return (
-        f"По вашему запросу подготовлен обзор требований к размещению объекта "
-        f"«{_esc(business_type)}» в {region_locative}."
+        f"По вашему запросу подготовлен обзор требований к объекту капитального "
+        f"строительства «{_esc(business_type)}» в {region_locative}."
     )
 
 
 def _greeting_for_comparison(business_type: str, region_a_locative: str, region_b_locative: str) -> str:
     return (
-        f"Подготовлен сравнительный анализ требований к размещению объекта "
-        f"«{_esc(business_type)}» в {region_a_locative} и в {region_b_locative}."
+        f"Подготовлен сравнительный анализ требований к объекту капитального "
+        f"строительства «{_esc(business_type)}» в {region_a_locative} и в {region_b_locative}."
     )
 
 
@@ -437,17 +436,20 @@ def _citation_matches_chunks(citation: str, chunks: list[RetrievedChunk]) -> boo
         section = (chunk.section_number or "").strip()
         if not section:
             continue
-        if (
-            section == normalized
-            or section.startswith(normalized + ".")
-            or normalized.startswith(section + ".")
+        # точное совпадение всегда ок
+        if section == normalized or section.replace(" ", "") == normalized_compact:
+            return True
+        # префиксное совпадение только для «настоящих» пунктов с точкой
+        # (иначе section="1" пропускает выдуманные «1.5.153», «15» и т.п.)
+        if "." in section and (
+            section.startswith(normalized + ".") or normalized.startswith(section + ".")
         ):
             return True
         # curated ID: «123-ФЗ/6», «СанПиН/7.1.3» — модель может вернуть суффикс или полный id
         if "/" in section:
             prefix, suffix = section.rsplit("/", 1)
             section_compact = section.replace(" ", "")
-            if normalized == section or normalized_compact == section_compact:
+            if normalized_compact == section_compact:
                 return True
             # «7.1.3» для СанПиН/7.1.3 — ок; голый «6» для 123-ФЗ/6 — нет
             if normalized == suffix and (len(suffix) > 1 or "." in suffix):
@@ -456,6 +458,7 @@ def _citation_matches_chunks(citation: str, chunks: list[RetrievedChunk]) -> boo
                 return True
             if prefix.lower() in normalized.lower() and suffix in normalized:
                 return True
+            # «СанПиН 2.2.1/2.1.1.1200-03» без номера пункта — не матчим к конкретному чанку
     return False
 
 
@@ -537,6 +540,9 @@ def _punkt_label(citation: str) -> str:
     normalized = _normalize_citation(citation)
     if not normalized or normalized.lower() in {"пункт не указан", "без номера", "n/a", "-", "—"}:
         return "номер пункта в доступных фрагментах не приведён"
+    # curated id уже содержит документ: «СанПиН/7.1.3», «123-ФЗ/69»
+    if "/" in normalized:
+        return normalized
     return f"п. {normalized}"
 
 
@@ -686,14 +692,6 @@ def _render_extraction(extraction: ExtractionResult) -> str:
             "в доступных источниках. Рекомендуем проверить муниципальные ПЗЗ и отраслевые НПА; "
             "ответ помощника нужно перепроверить самостоятельно."
         )
-    else:
-        filled = {item.category for item in extraction.items}
-        empty_categories = [c for c in get_settings().requirement_categories if c not in filled]
-        if empty_categories and filled:
-            empty_labels = ", ".join(_category_label(c) for c in empty_categories)
-            lines.append(
-                f"\nПо остальным категориям данные не найдены ({_esc(empty_labels)})."
-            )
 
     lines.append(format_additional_checks_block(extraction.business_type))
     return "\n".join(lines)

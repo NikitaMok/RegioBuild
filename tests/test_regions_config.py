@@ -24,3 +24,18 @@ def test_curated_federal_sources_cover_fz123_and_sanpin() -> None:
     assert any("123-ФЗ" in label for label in labels)
     assert any("СанПиН" in label for label in labels)
     assert any(c.region_code == "novosibirsk_oblast" for c in chunks)
+
+
+def test_curated_krasnodar_carwash_and_sanpin_meters() -> None:
+    chunks = all_curated_chunks()
+    by_section = {c.section_number: c for c in chunks}
+    assert "5.5.153" in by_section
+    assert "автомоек" in by_section["5.5.153"].text.lower()
+    assert "4.3.20" in by_section
+    assert "автомоек" in by_section["4.3.20"].text.lower()
+    assert "СанПиН/7.1.3" in by_section
+    assert "100" in by_section["СанПиН/7.1.3"].text
+    assert "50" in by_section["СанПиН/7.1.3"].text
+    assert "123-ФЗ/69" in by_section
+    assert "СанПиН/7.1.4" in by_section
+

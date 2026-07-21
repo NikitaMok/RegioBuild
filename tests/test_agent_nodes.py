@@ -204,9 +204,10 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "Сроки и документы" in text
     assert "п. 3.2" in text
     assert "Постановление №713/30" in text or "№713/30" in text
-    assert "По остальным категориям данные не найдены" in text
+    assert "По остальным категориям данные не найдены" not in text
     assert "Что требуется проверить дополнительно" in text
     assert "только учусь" not in text  # дисклеймер в format_response
+    assert "объекту капитального строительства" in text
 
 
 def test_citation_suffix_marks_federal_source_explicitly() -> None:
@@ -425,6 +426,24 @@ def test_citation_matches_chunks_accepts_known_section() -> None:
     assert nodes._citation_matches_chunks("5.5.153", chunks)
     assert nodes._citation_matches_chunks("п. 5.5.153", chunks)
     assert not nodes._citation_matches_chunks("725", chunks)
+
+
+def test_citation_rejects_prefix_against_ambiguous_section_one() -> None:
+    """section_number='1' из таблиц не должен подтверждать выдуманные 1.x / 15."""
+    chunks = [
+        RetrievedChunk(
+            id="t1",
+            text="автомойки | 1 бокс",
+            region_code="krasnodar_krai",
+            section_number="1",
+            category=None,
+            distance=0.1,
+        )
+    ]
+    assert nodes._citation_matches_chunks("1", chunks)
+    assert not nodes._citation_matches_chunks("1.5.153", chunks)
+    assert not nodes._citation_matches_chunks("15", chunks)
+    assert not nodes._citation_matches_chunks("5.5.153", chunks)
 
 
 def test_citation_matches_curated_federal_ids() -> None:
