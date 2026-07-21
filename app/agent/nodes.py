@@ -367,7 +367,13 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
             extraction = parse_json_response(raw_answer, ExtractionResult)
         except (LLMProviderError, LLMParsingError) as exc:
             logger.error(f"не удалось получить extraction от LLM: {exc}")
-            return {**state, "error": str(exc)}
+            return {
+                **state,
+                "error": (
+                    "Не удалось сформировать справку по ответу модели. "
+                    "Попробуйте ещё раз или укажите объект короче (например: торговый центр)."
+                ),
+            }
         # коды/тип берём из запроса, не из ответа модели
         allowed_chunks = list(state.get("retrieved_a", [])) + list(state.get("retrieved_federal", []))
         grounded_items = _filter_grounded_items(extraction.items, allowed_chunks)
@@ -398,7 +404,13 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         comparison = parse_json_response(raw_answer, ComparisonResult)
     except (LLMProviderError, LLMParsingError) as exc:
         logger.error(f"не удалось получить comparison от LLM: {exc}")
-        return {**state, "error": str(exc)}
+        return {
+            **state,
+            "error": (
+                "Не удалось сформировать сравнительную справку. "
+                "Попробуйте ещё раз или укажите объект короче."
+            ),
+        }
 
     region_a = get_region(state["region_a"])
     region_b = get_region(state["region_b"])

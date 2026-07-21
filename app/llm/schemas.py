@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 RequirementCategory = Literal[
     "земельно_правовые",
@@ -34,6 +34,8 @@ _CATEGORY_ALIASES: dict[str, RequirementCategory] = {
 
 SourceLevel = Literal["федеральный", "региональный"]
 
+_FEDERAL_MARKERS = ("123-фз", "санпин", "сп 42", "сп42")
+
 
 def _coerce_category(value: object) -> object:
     if not isinstance(value, str):
@@ -58,6 +60,25 @@ def _coerce_category(value: object) -> object:
     return value
 
 
+def _coerce_source_level(value: object, citation: object = None) -> SourceLevel:
+    """Пустая строка / мусор от LLM → региональный; маркеры 123-ФЗ/СанПиН → федеральный."""
+    text = (value if isinstance(value, str) else "") or ""
+    cleaned = text.strip().lower()
+    if cleaned in {"федеральный", "federal"}:
+        return "федеральный"
+    if cleaned in {"региональный", "regional", "регион"}:
+        return "региональный"
+
+    cite = (citation if isinstance(citation, str) else "") or ""
+    cite_l = cite.lower()
+    if any(marker in cite_l for marker in _FEDERAL_MARKERS):
+        return "федеральный"
+
+    if cleaned:
+        logger.warning(f"LLM вернула странный source_level «{value}», использую «региональный»")
+    return "региональный"
+
+
 class RequirementItem(BaseModel):
     category: RequirementCategory
     description: str
@@ -78,6 +99,14 @@ class RequirementItem(BaseModel):
     @classmethod
     def _normalize_category(cls, value: object) -> object:
         return _coerce_category(value)
+
+    @field_validator("source_level", mode="before")
+    @classmethod
+    def _normalize_source_level(cls, value: object, info: ValidationInfo) -> object:
+        citation = None
+        if info.data:
+            citation = info.data.get("citation")
+        return _coerce_source_level(value, citation)
 
 
 class ExtractionResult(BaseModel):
@@ -129,6 +158,14 @@ class DifferenceItem(BaseModel):
     def _normalize_category(cls, value: object) -> object:
         return _coerce_category(value)
 
+    @field_validator("source_level", mode="before")
+    @classmethod
+    def _normalize_source_level(cls, value: object, info: ValidationInfo) -> object:
+        citation = None
+        if info.data:
+            citation = info.data.get("citation_a") or info.data.get("citation_b")
+        return _coerce_source_level(value, citation)
+
 
 class CommonRequirementItem(BaseModel):
     """Норма, которая совпадает или одинаково применима в обоих регионах."""
@@ -143,6 +180,14 @@ class CommonRequirementItem(BaseModel):
     @classmethod
     def _normalize_category(cls, value: object) -> object:
         return _coerce_category(value)
+
+    @field_validator("source_level", mode="before")
+    @classmethod
+    def _normalize_source_level(cls, value: object, info: ValidationInfo) -> object:
+        citation = None
+        if info.data:
+            citation = info.data.get("citation")
+        return _coerce_source_level(value, citation)
 
 
 class ComparisonResult(BaseModel):
