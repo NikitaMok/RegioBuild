@@ -1,4 +1,4 @@
-"""Информационный режим: требования для бизнеса в одном регионе."""
+"""Информационный режим: требования для объекта в одном регионе."""
 
 from __future__ import annotations
 
@@ -14,19 +14,24 @@ from app.core.business_type import looks_like_business_query
 
 router = Router(name="info_mode")
 
-INVALID_BUSINESS_REPLY = (
-    "Не похоже на тип бизнеса для нормативов. Напишите коротко, например: "
-    "кафе, автомойка, склад, медицинский центр."
+ASK_OBJECT_TEXT = (
+    "Укажите объект капитального строительства или иной объект размещения, "
+    "требования к которому необходимо определить "
+    "(например: кафе, автосервис, склад и т.д.)."
 )
+
+INVALID_BUSINESS_REPLY = (
+    "Формулировка не позволяет определить объект размещения. Укажите объект кратко, "
+    "например: кафе, автомойка, склад, медицинский центр и т.д."
+)
+
+WAIT_TEXT = "Формирую правовую справку по запросу. Пожалуйста, подождите."
 
 
 @router.callback_query(F.data == "mode:info")
 async def start_info_flow(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(InfoFlow.waiting_business_type)
-    await callback.message.edit_text(
-        "Напишите тип бизнеса, который вас интересует (например: кафе, автосервис, склад).",
-        reply_markup=cancel_keyboard(),
-    )
+    await callback.message.edit_text(ASK_OBJECT_TEXT, reply_markup=cancel_keyboard())
     await callback.answer()
 
 
@@ -39,7 +44,7 @@ async def receive_business_type(message: Message, state: FSMContext) -> None:
 
     await state.update_data(business_type=business_type)
     await state.set_state(InfoFlow.waiting_region)
-    await message.answer("Выберите регион:", reply_markup=region_keyboard("region"))
+    await message.answer("Выберите субъект Российской Федерации:", reply_markup=region_keyboard("region"))
 
 
 @router.callback_query(InfoFlow.waiting_region, F.data.startswith("region:"))
@@ -49,9 +54,7 @@ async def receive_region(callback: CallbackQuery, state: FSMContext) -> None:
     business_type = data["business_type"]
     telegram_user_id = str(callback.from_user.id) if callback.from_user else None
 
-    await callback.message.edit_text(
-        "Проверяю нормативные акты по вашему запросу. Пожалуйста, подождите."
-    )
+    await callback.message.edit_text(WAIT_TEXT)
     await callback.answer()
 
     try:

@@ -51,6 +51,8 @@ class Settings(BaseSettings):
 
     llm_cache_enabled: bool = True
     llm_cache_size: int = 256
+    # пусто = рядом с sqlite БД (на Bothost обычно /app/data/llm_cache.json)
+    llm_cache_persist_path: str = ""
 
     sentry_dsn: str = ""
 

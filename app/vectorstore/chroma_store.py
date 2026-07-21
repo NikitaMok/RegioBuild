@@ -53,6 +53,24 @@ class ChromaStore:
     def count(self) -> int:
         return self._collection.count()
 
+    def has_section(self, region_code: str, section_number: str) -> bool:
+        """Есть ли в коллекции чанк с данным region_code + section_number."""
+        try:
+            result = self._collection.get(
+                where={
+                    "$and": [
+                        {"region_code": region_code},
+                        {"section_number": section_number},
+                    ]
+                },
+                limit=1,
+                include=["metadatas"],
+            )
+        except Exception:
+            return False
+        ids = result.get("ids") or []
+        return len(ids) > 0
+
 
 @lru_cache
 def get_chroma_store() -> ChromaStore:

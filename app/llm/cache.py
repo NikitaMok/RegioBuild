@@ -1,10 +1,16 @@
-"""In-memory LRU-кэш ответов LLM (без Redis — один процесс API на Bothost)."""
+"""In-memory LRU + дисковый кэш ответов LLM (без Redis — один процесс API на Bothost).
+
+Диск нужен потому, что при каждом Sync/пересоздании контейнера память обнуляется,
+а /app/data на Bothost обычно сохраняется между деплоями.
+"""
 
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 from collections import OrderedDict
+from pathlib import Path
 
 from loguru import logger
 
@@ -36,6 +42,18 @@ class _LRUCache:
             while len(self._data) > self._maxsize:
                 self._data.popitem(last=False)
 
+    def items(self) -> list[tuple[str, str]]:
+        with self._lock:
+            return list(self._data.items())
+
+    def load_many(self, pairs: list[tuple[str, str]]) -> None:
+        with self._lock:
+            for key, value in pairs:
+                self._data[key] = value
+                self._data.move_to_end(key)
+            while len(self._data) > self._maxsize:
+                self._data.popitem(last=False)
+
 
 def _cache_key(
     system_prompt: str,
@@ -47,13 +65,66 @@ def _cache_key(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-class CachingLLMProvider(LLMProvider):
-    """Декоратор над LLMProvider с LRU-кэшем полных ответов."""
+def _default_persist_path() -> Path:
+    from app.core.config import get_settings
 
-    def __init__(self, inner: LLMProvider, maxsize: int = 256) -> None:
+    settings = get_settings()
+    configured = (getattr(settings, "llm_cache_persist_path", None) or "").strip()
+    if configured:
+        return Path(configured)
+
+    db_url = settings.database_url
+    # sqlite:////app/data/regiobuild.db → /app/data/llm_cache.json
+    if db_url.startswith("sqlite:///"):
+        db_path = db_url.replace("sqlite:///", "", 1)
+        # четыре слэша → абсолютный путь на Linux (/app/...)
+        if db_path.startswith("/") or (len(db_path) > 2 and db_path[1] == ":"):
+            return Path(db_path).resolve().parent / "llm_cache.json"
+        return Path(db_path).resolve().parent / "llm_cache.json"
+    return Path("data") / "llm_cache.json"
+
+
+class CachingLLMProvider(LLMProvider):
+    """Декоратор над LLMProvider с LRU-кэшем полных ответов (+ опционально диск)."""
+
+    def __init__(
+        self,
+        inner: LLMProvider,
+        maxsize: int = 256,
+        persist_path: Path | None = None,
+    ) -> None:
         self._inner = inner
         self.name = f"cached:{inner.name}"
         self._cache = _LRUCache(maxsize=maxsize)
+        self._persist_path = persist_path if persist_path is not None else _default_persist_path()
+        self._disk_lock = threading.Lock()
+        self._load_disk()
+
+    def _load_disk(self) -> None:
+        path = self._persist_path
+        if not path or not path.exists():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                return
+            pairs = [(str(k), str(v)) for k, v in raw.items() if isinstance(v, str)]
+            self._cache.load_many(pairs[-self._cache._maxsize :])
+            logger.info(f"LLM disk cache loaded: {len(pairs)} entries from {path}")
+        except Exception:
+            logger.exception(f"не удалось загрузить LLM disk cache: {path}")
+
+    def _save_disk(self) -> None:
+        path = self._persist_path
+        if not path:
+            return
+        with self._disk_lock:
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                payload = dict(self._cache.items())
+                path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                logger.exception(f"не удалось сохранить LLM disk cache: {path}")
 
     def complete(
         self,
@@ -77,6 +148,7 @@ class CachingLLMProvider(LLMProvider):
             max_tokens=max_tokens,
         )
         self._cache.set(key, result)
+        self._save_disk()
         return result
 
     @property

@@ -43,7 +43,9 @@ EXTRACTION_SYSTEM_PROMPT = f"""\
    (в т.ч. строки таблиц с этим объектом); false — общая применимая норма.
 6. source_level: "федеральный" или "региональный".
 7. Не заполняй пустые категории: если фактов нет — не добавляй items.
-8. Ответ — строго JSON по схеме, без текста вне JSON. Заполни JSON полностью,
+8. Не пиши «федеральный стандарт» и подобные размытые ярлыки — только
+   конкретные названия (СП 42.13330.2016, 123-ФЗ, СанПиН …).
+9. Ответ — строго JSON по схеме, без текста вне JSON. Заполни JSON полностью,
    не обрывай строки на полуслове.
 """
 
@@ -75,7 +77,9 @@ COMPARISON_SYSTEM_PROMPT = f"""\
    а в citation_* — «пункт не указан».
 8. {_CITATION_RULE}
 9. overall_summary — 1–2 предложения: что отличается и что совпадает.
-10. Ответ — строго JSON по схеме, без текста вне JSON. Заполни JSON полностью,
+10. Не пиши «федеральный стандарт» — только конкретные НПА
+    (СП 42.13330.2016, 123-ФЗ, СанПиН …).
+11. Ответ — строго JSON по схеме, без текста вне JSON. Заполни JSON полностью,
     не обрывай строки на полуслове.
 """
 
@@ -100,7 +104,14 @@ def build_business_type_normalization_prompt(raw_text: str) -> str:
 def _format_chunks(chunks: list[RetrievedChunk]) -> str:
     if not chunks:
         return "(фрагменты не найдены)"
-    return "\n\n".join(f"[пункт {chunk.section_number or 'без номера'}] {chunk.text}" for chunk in chunks)
+    parts: list[str] = []
+    for chunk in chunks:
+        text = (chunk.text or "").strip()
+        # усечение длинных табличных фрагментов — экономия токенов
+        if len(text) > 700:
+            text = text[:700].rstrip() + "…"
+        parts.append(f"[пункт {chunk.section_number or 'без номера'}] {text}")
+    return "\n\n".join(parts)
 
 
 def build_extraction_prompt(

@@ -38,7 +38,18 @@ from app.llm.schemas import CommonRequirementItem, ComparisonResult, ExtractionR
 from app.vectorstore.types import RetrievedChunk
 from app.vectorstore.retriever import retrieve
 
-TOP_K_PER_CATEGORY = 5
+TOP_K_PER_QUERY = 4
+MAX_CHUNKS_PER_REGION = 10
+MAX_FEDERAL_CHUNKS = 8
+
+# меньше запросов к эмбеддеру/Chroma → быстрее и дешевле по токенам LLM
+_RETRIEVAL_QUERY_TEMPLATES: tuple[str, ...] = (
+    "{bt}",
+    "{bt} размещение парковка машино-места",
+    "{bt} пожарная безопасность",
+    "{bt} санитарно-защитная зона СанПиН",
+    "{bt} градостроительные требования",
+)
 
 DISCLAIMER_TEXT = (
     "\n\n⚠️ Я справочный помощник и только учусь: ответ не является юридической "
@@ -47,14 +58,9 @@ DISCLAIMER_TEXT = (
     "прежде чем опираться на ответ."
 )
 
-# короткие маркеры регионов в сравнении (вместо цветных кружков)
-_REGION_ABBREV: dict[str, str] = {
-    "moscow_oblast": "МО",
-    "krasnodar_krai": "КК",
-    "sverdlovsk_oblast": "СО",
-    "novosibirsk_oblast": "НО",
-    "tatarstan": "РТ",
-}
+# короткие маркеры регионов больше не используем в UI — тематические эмодзи
+_COMPARE_SIDE_EMOJI_A = "🔹"
+_COMPARE_SIDE_EMOJI_B = "🔸"
 
 MAX_WORDS_FOR_RAW_BUSINESS_TYPE = 3
 
@@ -175,28 +181,29 @@ def _chunk_mentions_business(chunk: RetrievedChunk, business_type: str) -> bool:
     return needle in text or (len(stem) >= 4 and stem in text)
 
 
-def _retrieve_for_region(business_type: str, region_code: str) -> list[RetrievedChunk]:
-    # по категориям отдельно — иначе top_k забивают чанки про «документы»
-    found_ids: set[str] = set()
-    result: list[RetrievedChunk] = []
+def _retrieve_for_region(
+    business_type: str,
+    region_code: str,
+    *,
+    max_chunks: int = MAX_CHUNKS_PER_REGION,
+) -> list[RetrievedChunk]:
+    """Сфокусированный retrieval: мало запросов, жёсткий лимит чанков для LLM."""
+    found: dict[str, RetrievedChunk] = {}
 
-    for category in get_settings().requirement_categories:
-        query = f"{business_type}: {category}"
-        for chunk in retrieve(query, region_code=region_code, top_k=TOP_K_PER_CATEGORY):
-            if chunk.id not in found_ids:
-                found_ids.add(chunk.id)
-                result.append(chunk)
+    for template in _RETRIEVAL_QUERY_TEMPLATES:
+        query = template.format(bt=business_type)
+        for chunk in retrieve(query, region_code=region_code, top_k=TOP_K_PER_QUERY):
+            prev = found.get(chunk.id)
+            if prev is None or chunk.distance < prev.distance:
+                found[chunk.id] = chunk
 
-    # прямой запрос по типу бизнеса: табличные строки (автомойка в табл. 108) иначе тонут
-    for chunk in retrieve(business_type, region_code=region_code, top_k=TOP_K_PER_CATEGORY):
-        if chunk.id not in found_ids:
-            found_ids.add(chunk.id)
-            result.append(chunk)
-
-    # чанки с буквальным упоминанием объекта — в начало промпта
-    mentioned = [c for c in result if _chunk_mentions_business(c, business_type)]
-    rest = [c for c in result if c.id not in {m.id for m in mentioned}]
-    return mentioned + rest
+    chunks = list(found.values())
+    mentioned = [c for c in chunks if _chunk_mentions_business(c, business_type)]
+    rest = [c for c in chunks if c.id not in {m.id for m in mentioned}]
+    mentioned.sort(key=lambda c: c.distance)
+    rest.sort(key=lambda c: c.distance)
+    ordered = mentioned + rest
+    return ordered[:max_chunks]
 
 
 def retrieve_chunks(state: AgentState) -> AgentState:
@@ -207,7 +214,9 @@ def retrieve_chunks(state: AgentState) -> AgentState:
     chunks_a = _retrieve_for_region(business_type, state["region_a"])
     logger.info(f"регион A ({state['region_a']}): найдено {len(chunks_a)} чанков")
 
-    chunks_federal = _retrieve_for_region(business_type, FEDERAL_CODE)
+    chunks_federal = _retrieve_for_region(
+        business_type, FEDERAL_CODE, max_chunks=MAX_FEDERAL_CHUNKS
+    )
     logger.info(f"федеральный уровень: найдено {len(chunks_federal)} чанков")
 
     new_state: AgentState = {**state, "retrieved_a": chunks_a, "retrieved_federal": chunks_federal}
@@ -391,15 +400,15 @@ def _group_by_category(items: list) -> dict[str, list]:
 
 def _greeting_for_info(business_type: str, region_locative: str) -> str:
     return (
-        f"Я вас понял! Вы хотите открыть «{_esc(business_type)}» в {region_locative} — "
-        f"ниже требования по нормативам."
+        f"По вашему запросу подготовлен обзор требований к размещению объекта "
+        f"«{_esc(business_type)}» в {region_locative}."
     )
 
 
 def _greeting_for_comparison(business_type: str, region_a_locative: str, region_b_locative: str) -> str:
     return (
-        f"Я вас понял! Сравниваю требования для «{_esc(business_type)}» "
-        f"в {region_a_locative} и в {region_b_locative}."
+        f"Подготовлен сравнительный анализ требований к размещению объекта "
+        f"«{_esc(business_type)}» в {region_a_locative} и в {region_b_locative}."
     )
 
 
@@ -527,7 +536,7 @@ def _ground_optional_citation(citation: str, chunks: list[RetrievedChunk]) -> st
 def _punkt_label(citation: str) -> str:
     normalized = _normalize_citation(citation)
     if not normalized or normalized.lower() in {"пункт не указан", "без номера", "n/a", "-", "—"}:
-        return "пункт не указан"
+        return "номер пункта в доступных фрагментах не приведён"
     return f"п. {normalized}"
 
 
@@ -542,24 +551,20 @@ def _format_item_source(citation: str, source_level: str, region_code: str) -> s
     return f"({_esc(npa)}, {_esc(_punkt_label(citation))})"
 
 
-def _region_marker(region_code: str) -> str:
-    return _REGION_ABBREV.get(region_code, region_code[:2].upper())
-
-
 def _format_compare_side(
     region_code: str,
     value: str,
     citation: str,
     source_level: str,
+    side_emoji: str,
 ) -> str:
     region = get_region(region_code)
-    marker = _region_marker(region_code)
     if source_level == "федеральный":
         npa = short_federal_cite_from_citation(citation)
     else:
         npa = short_npa_cite(region.document_title)
     return (
-        f"  ({_esc(marker)}) <b>{_esc(region.display_name)}</b> "
+        f"  {side_emoji} <b>{_esc(region.display_name)}</b> "
         f"({_esc(npa)}, {_esc(_punkt_label(citation))}): "
         f"{_esc(_humanize_missing_value(value))}"
     )
@@ -702,7 +707,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         f"<b>{_greeting_for_comparison(comparison.business_type, region_a.name_locative, region_b.name_locative)}</b>",
         f"🏛 {region_a.display_name} — правовое регулирование: {region_a.document_title} "
         f"(проверено {region_a.last_verified})",
-        f"🗺 {region_b.display_name} — правовое регулирование: {region_b.document_title} "
+        f"⚖ {region_b.display_name} — правовое регулирование: {region_b.document_title} "
         f"(проверено {region_b.last_verified})",
         f"📜 Федеральные нормы (применяются при отсутствии региональных): {sp_label}.",
         f"\n{_esc(comparison.overall_summary)}",
@@ -737,6 +742,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                         diff.region_a_value,
                         diff.citation_a,
                         diff.source_level,
+                        _COMPARE_SIDE_EMOJI_A,
                     )
                 )
                 lines.append(
@@ -745,6 +751,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                         diff.region_b_value,
                         diff.citation_b,
                         diff.source_level,
+                        _COMPARE_SIDE_EMOJI_B,
                     )
                 )
                 diff_number += 1

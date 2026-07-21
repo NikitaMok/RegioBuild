@@ -170,7 +170,7 @@ def test_greeting_for_info_mentions_business_and_region() -> None:
     greeting = nodes._greeting_for_info("склад", "Московской области")
     assert "«склад»" in greeting
     assert "Московской области" in greeting
-    assert "Я вас понял!" in greeting
+    assert "подготовлен обзор требований" in greeting
 
 
 def test_greeting_for_comparison_mentions_business_and_both_regions() -> None:
@@ -178,6 +178,7 @@ def test_greeting_for_comparison_mentions_business_and_both_regions() -> None:
     assert "«склад»" in greeting
     assert "в Московской области" in greeting
     assert "в Краснодарском крае" in greeting
+    assert "сравнительный анализ" in greeting
 
 
 def test_render_extraction_includes_greeting_regulator_category_and_citation() -> None:
@@ -194,7 +195,7 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     )
     text = nodes._render_extraction(extraction)
 
-    assert "Я вас понял!" in text
+    assert "подготовлен обзор требований" in text
     assert "«склад»" in text
     assert "в Московской области" in text
     assert "Правовое регулирование (регион)" in text
@@ -326,8 +327,10 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
     assert "1. Срок выдачи отличается" in text
     assert "10 дней" in text
     assert "15 дней" in text
-    assert "(МО)" in text
-    assert "(КК)" in text
+    assert "🔹" in text
+    assert "🔸" in text
+    assert "(МО)" not in text
+    assert "(КК)" not in text
     assert "Постановление №713/30" in text
     assert "Приказ №78" in text
     assert "п. 3.2" in text
@@ -352,8 +355,9 @@ def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:
     assert text.index("N 713/30") < text.index("N 78")
     assert "Различий не обнаружено" in text
     assert "🏛" in text
-    assert "🗺" in text
+    assert "⚖" in text
     assert "📜" in text
+    assert "🗺" not in text
 
 
 def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
@@ -380,7 +384,7 @@ def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
         "региональные требования отсутствуют" in text
         or "в нормативе региона не указано" in text
     )
-    assert "пункт не указан" in text
+    assert "номер пункта в доступных фрагментах не приведён" in text
 
 
 def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> None:

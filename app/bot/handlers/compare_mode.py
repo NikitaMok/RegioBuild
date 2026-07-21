@@ -1,4 +1,4 @@
-"""Режим сравнения требований между двумя регионами."""
+"""Режим сравнения требований между двумя субъектами РФ."""
 
 from __future__ import annotations
 
@@ -14,19 +14,24 @@ from app.core.business_type import looks_like_business_query
 
 router = Router(name="compare_mode")
 
-INVALID_BUSINESS_REPLY = (
-    "Не похоже на тип бизнеса для нормативов. Напишите коротко, например: "
-    "кафе, автомойка, склад, медицинский центр."
+ASK_OBJECT_TEXT = (
+    "Укажите объект капитального строительства или иной объект размещения, "
+    "требования к которому необходимо сравнить "
+    "(например: кафе, автосервис, склад и т.д.)."
 )
+
+INVALID_BUSINESS_REPLY = (
+    "Формулировка не позволяет определить объект размещения. Укажите объект кратко, "
+    "например: кафе, автомойка, склад, медицинский центр и т.д."
+)
+
+WAIT_TEXT = "Готовлю сравнительный анализ нормативных требований. Пожалуйста, подождите."
 
 
 @router.callback_query(F.data == "mode:compare")
 async def start_compare_flow(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(CompareFlow.waiting_business_type)
-    await callback.message.edit_text(
-        "Напишите тип бизнеса, который вас интересует (например: кафе, автосервис, склад).",
-        reply_markup=cancel_keyboard(),
-    )
+    await callback.message.edit_text(ASK_OBJECT_TEXT, reply_markup=cancel_keyboard())
     await callback.answer()
 
 
@@ -39,7 +44,10 @@ async def receive_business_type(message: Message, state: FSMContext) -> None:
 
     await state.update_data(business_type=business_type)
     await state.set_state(CompareFlow.waiting_region_a)
-    await message.answer("Выберите первый регион:", reply_markup=region_keyboard("region_a"))
+    await message.answer(
+        "Выберите первый субъект Российской Федерации:",
+        reply_markup=region_keyboard("region_a"),
+    )
 
 
 @router.callback_query(CompareFlow.waiting_region_a, F.data.startswith("region_a:"))
@@ -48,7 +56,7 @@ async def receive_region_a(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(region_a=region_a)
     await state.set_state(CompareFlow.waiting_region_b)
     await callback.message.edit_text(
-        "Выберите второй регион для сравнения:",
+        "Выберите второй субъект Российской Федерации для сравнения:",
         reply_markup=region_keyboard("region_b", exclude_code=region_a),
     )
     await callback.answer()
@@ -62,9 +70,7 @@ async def receive_region_b(callback: CallbackQuery, state: FSMContext) -> None:
     region_a = data["region_a"]
     telegram_user_id = str(callback.from_user.id) if callback.from_user else None
 
-    await callback.message.edit_text(
-        "Сверяю требования по двум регионам. Пожалуйста, подождите."
-    )
+    await callback.message.edit_text(WAIT_TEXT)
     await callback.answer()
 
     try:
