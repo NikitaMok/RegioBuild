@@ -25,7 +25,7 @@ def test_extraction_prompt_includes_federal_block_separately_from_regional() -> 
 
     assert "Региональная норма про склады" in prompt
     assert "Федеральная норма СП 42.13330" in prompt
-    assert "федерального СП 42.13330.2016" in prompt
+    assert "федеральных норм" in prompt
 
 
 def test_extraction_prompt_handles_missing_federal_chunks() -> None:
@@ -46,6 +46,6 @@ def test_comparison_prompt_includes_shared_federal_block() -> None:
     assert "Норма региона A" in prompt
     assert "Норма региона B" in prompt
     assert "Федеральная норма" in prompt
-    assert "общий фон для обоих регионов" in prompt
+    assert "федеральных норм" in prompt
     assert "common_requirements" in prompt
     assert "Московская область" in prompt

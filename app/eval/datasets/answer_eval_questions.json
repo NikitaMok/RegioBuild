@@ -22,5 +22,9 @@
   {"id": "compare-3", "mode": "compare", "business_type": "склад", "region_a": "moscow_oblast", "region_b": "krasnodar_krai", "expected_categories": ["подключение_к_сетям", "состав_проекта"]},
   {"id": "compare-4", "mode": "compare", "business_type": "продуктовый магазин", "region_a": "moscow_oblast", "region_b": "krasnodar_krai", "expected_categories": ["документы", "сроки"]},
   {"id": "compare-5", "mode": "compare", "business_type": "гостиница", "region_a": "moscow_oblast", "region_b": "krasnodar_krai", "expected_categories": ["состав_проекта", "подключение_к_сетям"]},
-  {"id": "compare-6", "mode": "compare", "business_type": "производственный цех", "region_a": "moscow_oblast", "region_b": "krasnodar_krai", "expected_categories": ["подключение_к_сетям", "состав_проекта"]}
+  {"id": "compare-6", "mode": "compare", "business_type": "производственный цех", "region_a": "moscow_oblast", "region_b": "krasnodar_krai", "expected_categories": ["подключение_к_сетям", "состав_проекта"]},
+  {"id": "info-qa-automyka", "mode": "info", "business_type": "автомойка", "region_a": "krasnodar_krai", "expected_categories": ["пожарная_безопасность", "санитарные_экологические", "сроки_и_документы"]},
+  {"id": "info-qa-office", "mode": "info", "business_type": "офис", "region_a": "sverdlovsk_oblast", "expected_categories": ["градостроительные", "подключение_к_сетям"]},
+  {"id": "info-qa-medcenter", "mode": "info", "business_type": "медицинский центр", "region_a": "moscow_oblast", "expected_categories": ["санитарные_экологические", "сроки_и_документы"]},
+  {"id": "compare-qa-autoservice", "mode": "compare", "business_type": "автосервис", "region_a": "moscow_oblast", "region_b": "krasnodar_krai", "expected_categories": ["пожарная_безопасность", "сроки_и_документы"]}
 ]

@@ -149,21 +149,21 @@ def test_esc_escapes_html_special_characters() -> None:
 
 
 def test_category_label_uses_friendly_names_with_fallback() -> None:
-    assert nodes._category_label("сроки") == "⏱ Сроки"
-    assert nodes._category_label("состав_проекта") == "📐 Технические параметры"
-    assert nodes._category_label("иные_требования") == "🏞 Благоустройство и размещение"
+    assert nodes._category_label("сроки_и_документы") == "Сроки и документы"
+    assert nodes._category_label("градостроительные") == "Градостроительные нормы"
+    assert nodes._category_label("пожарная_безопасность") == "Пожарная безопасность"
     assert nodes._category_label("непонятная_категория") == "Непонятная категория"
 
 
 def test_group_by_category_groups_items_by_category() -> None:
     items = [
-        RequirementItem(category="сроки", description="a", citation="1"),
-        RequirementItem(category="документы", description="b", citation="2"),
-        RequirementItem(category="сроки", description="c", citation="3"),
+        RequirementItem(category="сроки_и_документы", description="a", citation="1"),
+        RequirementItem(category="подключение_к_сетям", description="b", citation="2"),
+        RequirementItem(category="сроки_и_документы", description="c", citation="3"),
     ]
     groups = nodes._group_by_category(items)
-    assert len(groups["сроки"]) == 2
-    assert len(groups["документы"]) == 1
+    assert len(groups["сроки_и_документы"]) == 2
+    assert len(groups["подключение_к_сетям"]) == 1
 
 
 def test_greeting_for_info_mentions_business_and_region() -> None:
@@ -184,24 +184,33 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     extraction = ExtractionResult(
         region_code="moscow_oblast",
         business_type="склад",
-        items=[RequirementItem(category="сроки", description="Срок выдачи — 10 дней.", citation="3.2")],
+        items=[
+            RequirementItem(
+                category="сроки_и_документы",
+                description="Срок выдачи — 10 дней.",
+                citation="3.2",
+            )
+        ],
     )
     text = nodes._render_extraction(extraction)
 
     assert "Я вас понял!" in text
     assert "«склад»" in text
     assert "в Московской области" in text
-    assert "Регулируется" in text
-    assert "⏱ Сроки" in text
+    assert "Правовое регулирование" in text
+    assert "Федеральные нормы (применяются при отсутствии региональных)" in text
+    assert "Сроки и документы" in text
     assert "п. 3.2" in text
-    # пустые категории больше не шумят в ответе
-    assert "В региональном акте по этой категории ничего не найдено." not in text
-    assert "📄 Необходимые документы" not in text
+    assert "По остальным категориям данные не найдены" in text
+    assert "Что требуется проверить дополнительно" in text
+    assert "юридической консультацией" not in text  # дисклеймер в format_response
 
 
 def test_citation_suffix_marks_federal_source_explicitly() -> None:
     assert nodes._citation_suffix("3.2", "региональный") == "(п. 3.2)"
-    assert nodes._citation_suffix("5.1", "федеральный") == "(СП 42.13330.2016, п. 5.1)"
+    federal = nodes._citation_suffix("5.1", "федеральный")
+    assert "СП 42.13330.2016" in federal
+    assert "п. 5.1" in federal
 
 
 def test_citation_suffix_strips_punkt_noise() -> None:
@@ -215,7 +224,7 @@ def test_render_extraction_marks_federal_fallback_item() -> None:
         business_type="склад",
         items=[
             RequirementItem(
-                category="сроки",
+                category="сроки_и_документы",
                 description="Срок выдачи разрешения — 10 дней.",
                 citation="5.1",
                 is_specific=False,
@@ -225,7 +234,8 @@ def test_render_extraction_marks_federal_fallback_item() -> None:
     )
     text = nodes._render_extraction(extraction)
 
-    assert "СП 42.13330.2016, п. 5.1" in text
+    assert "СП 42.13330.2016" in text
+    assert "п. 5.1" in text
     assert "Специальных региональных норм нет" in text
 
 
@@ -235,7 +245,7 @@ def test_render_extraction_flags_general_norms_when_no_specific_ones_found() -> 
         business_type="склад",
         items=[
             RequirementItem(
-                category="сроки",
+                category="сроки_и_документы",
                 description="Срок выдачи разрешения — 10 дней.",
                 citation="3.2",
                 is_specific=False,
@@ -254,8 +264,18 @@ def test_render_extraction_shows_specific_and_general_separately() -> None:
         region_code="moscow_oblast",
         business_type="склад",
         items=[
-            RequirementItem(category="сроки", description="Спец. норма про склады.", citation="1.1", is_specific=True),
-            RequirementItem(category="сроки", description="Общая норма про сроки.", citation="1.2", is_specific=False),
+            RequirementItem(
+                category="сроки_и_документы",
+                description="Спец. норма про склады.",
+                citation="1.1",
+                is_specific=True,
+            ),
+            RequirementItem(
+                category="сроки_и_документы",
+                description="Общая норма про сроки.",
+                citation="1.2",
+                is_specific=False,
+            ),
         ],
     )
     text = nodes._render_extraction(extraction)
@@ -273,14 +293,14 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
         overall_summary="Требования почти совпадают.",
         common_requirements=[
             CommonRequirementItem(
-                category="иные_требования",
-                description="Парковки считаются по общим правилам.",
+                category="градостроительные",
+                description="Парковки считаются по общим правилам регионального норматива.",
                 citation="5.1",
             )
         ],
         differences=[
             DifferenceItem(
-                category="сроки",
+                category="сроки_и_документы",
                 region_a_value="10 дней",
                 region_b_value="15 дней",
                 summary="Срок выдачи отличается",
@@ -294,13 +314,15 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
     assert "в Краснодарском крае" in text
     assert "Что совпадает" in text
     assert "Чем отличаются" in text
+    # различия идут раньше совпадений
+    assert text.index("Чем отличаются") < text.index("Что совпадает")
     assert "1. Парковки" in text
     assert "1. Срок выдачи отличается" in text
     assert "10 дней" in text
     assert "15 дней" in text
     assert "🔵" in text
     assert "🟢" in text
-    assert "По этой категории различий" not in text
+    assert "Что требуется проверить дополнительно" in text
 
 
 def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:
@@ -316,7 +338,7 @@ def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:
     assert "N 713/30" in text
     assert "N 78" in text
     assert text.index("N 713/30") < text.index("N 78")
-    assert "Региональных различий в найденных нормах нет" in text
+    assert "Различий не обнаружено" in text
 
 
 def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
@@ -327,7 +349,7 @@ def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
         overall_summary="Отличие есть.",
         differences=[
             DifferenceItem(
-                category="сроки",
+                category="сроки_и_документы",
                 region_a_value="не найдено в предоставленных фрагментах",
                 region_b_value="10 дней",
                 summary="Срок отличается",
@@ -337,7 +359,10 @@ def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
     text = nodes._render_comparison(comparison)
 
     assert "предоставленных фрагментах" not in text
-    assert "в нормативе региона не указано" in text
+    assert (
+        "региональные требования отсутствуют" in text
+        or "в нормативе региона не указано" in text
+    )
 
 
 def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> None:
@@ -348,7 +373,7 @@ def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> 
         overall_summary="Есть отличие в общих сроках.",
         differences=[
             DifferenceItem(
-                category="сроки",
+                category="сроки_и_документы",
                 region_a_value="10 дней",
                 region_b_value="15 дней",
                 summary="Срок выдачи отличается",
@@ -390,8 +415,8 @@ def test_filter_grounded_items_drops_hallucinated_citations() -> None:
         )
     ]
     items = [
-        RequirementItem(category="документы", description="Реальное.", citation="1.2"),
-        RequirementItem(category="документы", description="Выдумка.", citation="725"),
+        RequirementItem(category="сроки_и_документы", description="Реальное.", citation="1.2"),
+        RequirementItem(category="сроки_и_документы", description="Выдумка.", citation="725"),
     ]
     grounded = nodes._filter_grounded_items(items, chunks)
     assert len(grounded) == 1
@@ -407,13 +432,30 @@ def test_replace_region_placeholders_uses_display_names() -> None:
     assert "Краснодарский край" in cleaned
 
 
+def test_fuzzy_resolves_medical_typo() -> None:
+    from app.core.business_type import fuzzy_match_business_type, resolve_business_type
+
+    assert fuzzy_match_business_type("медьцынский центр") == "медицинский центр"
+    assert resolve_business_type("Медьцынский центр") == "медицинский центр"
+
+
+def test_normalize_business_type_fixes_typo_without_llm(monkeypatch) -> None:
+    def _fail_if_called():
+        raise AssertionError("для короткой фразы LLM вызывать не нужно")
+
+    monkeypatch.setattr(nodes, "get_llm_provider", _fail_if_called)
+
+    state = nodes.normalize_business_type({"business_type": "медьцынский центр"})
+    assert state["business_type"] == "медицинский центр"
+
+
 def test_format_response_appends_disclaimer_on_success() -> None:
     state = {
         "mode": "info",
         "extraction": ExtractionResult(region_code="moscow_oblast", business_type="склад", items=[]),
     }
     result = nodes.format_response(state)
-    assert "Ответ может быть неполным" in result["response_text"]
+    assert "не является юридической консультацией" in result["response_text"]
 
 
 def test_format_response_shows_normalized_business_type_prefix() -> None:

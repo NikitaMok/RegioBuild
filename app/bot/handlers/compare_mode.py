@@ -69,7 +69,8 @@ async def receive_region_b(callback: CallbackQuery, state: FSMContext) -> None:
 
     await callback.message.edit_text(
         f"Сравниваю требования для «{html.escape(business_type)}»: "
-        f"{region_a_name} и {region_b_name}, минуту..."
+        f"{region_a_name} и {region_b_name}.\n"
+        f"Обычно несколько секунд; после перезапуска сервиса первый ответ может занять до минуты."
     )
     await callback.answer()
 

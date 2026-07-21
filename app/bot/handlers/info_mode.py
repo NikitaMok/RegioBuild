@@ -54,7 +54,8 @@ async def receive_region(callback: CallbackQuery, state: FSMContext) -> None:
     telegram_user_id = str(callback.from_user.id) if callback.from_user else None
 
     await callback.message.edit_text(
-        f"Ищу требования для «{html.escape(business_type)}» в регионе {region_name}, минуту..."
+        f"Ищу требования для «{html.escape(business_type)}» в регионе {region_name}.\n"
+        f"Обычно несколько секунд; после перезапуска сервиса первый ответ может занять до минуты."
     )
     await callback.answer()
 

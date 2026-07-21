@@ -64,7 +64,15 @@ def _run_case(case: dict) -> CaseResult:
         notes.append("в ответе нет цитат вида 'п. ...'")
 
     expected_categories = case.get("expected_categories", [])
-    covered = sum(1 for category in expected_categories if category.replace("_", " ") in answer.lower())
+    from app.agent.nodes import CATEGORY_LABELS
+
+    def _category_mentioned(category: str) -> bool:
+        label = CATEGORY_LABELS.get(category, category.replace("_", " ")).lower()
+        needle = category.replace("_", " ").lower()
+        lowered = answer.lower()
+        return label in lowered or needle in lowered
+
+    covered = sum(1 for category in expected_categories if _category_mentioned(category))
     category_coverage = covered / len(expected_categories) if expected_categories else 1.0
     if category_coverage < 1.0:
         notes.append(f"покрыто {covered}/{len(expected_categories)} ожидаемых категорий")

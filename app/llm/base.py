@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 # лимит ответа модели: иначе длинные compare/info обрываются на полуслове
-DEFAULT_MAX_TOKENS = 4000
+DEFAULT_MAX_TOKENS = 5000
 
 
 class LLMProvider(ABC):

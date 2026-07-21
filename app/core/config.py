@@ -45,15 +45,27 @@ class Settings(BaseSettings):
     api_base_url: str = "http://localhost:8000"
 
     log_level: str = "INFO"
+    log_json: bool = False
 
     daily_query_limit: int = 30
 
+    llm_cache_enabled: bool = True
+    llm_cache_size: int = 256
+
+    sentry_dsn: str = ""
+
+    # 10 категорий коммерческого ответа; старые коды coercятся в schemas
     requirement_categories: tuple[str, ...] = (
-        "сроки",
-        "документы",
+        "земельно_правовые",
+        "градостроительные",
+        "пожарная_безопасность",
+        "санитарные_экологические",
+        "архитектурный_облик",
+        "дорожное_согласование",
+        "налоги_поддержка",
+        "процедуры_согласования",
         "подключение_к_сетям",
-        "состав_проекта",
-        "иные_требования",
+        "сроки_и_документы",
     )
 
 

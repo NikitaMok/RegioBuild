@@ -22,6 +22,8 @@ SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 
 COPY app ./app
 COPY data ./data
+COPY config ./config
+COPY scripts ./scripts
 COPY migrations ./migrations
 COPY alembic.ini .
 COPY entrypoint.sh .

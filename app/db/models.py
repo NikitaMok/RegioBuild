@@ -62,4 +62,7 @@ class QueryLog(Base):
     answer: Mapped[str] = mapped_column(Text, nullable=True)
     feedback: Mapped[str] = mapped_column(String(8), nullable=True)  # "up" | "down" | None
     telegram_user_id: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    client_ip: Mapped[str] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str] = mapped_column(String(256), nullable=True)
+    error_text: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

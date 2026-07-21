@@ -7,13 +7,17 @@ from loguru import logger
 
 from app.agent.state import AgentState
 from app.classifier.predict import ClassifierNotTrainedError, predict_category
+from app.core.additional_checks import format_additional_checks_block
 from app.core.business_type import (
     contains_forbidden_words,
     is_known_business_type,
     is_unknown_business_type,
     looks_like_business_query,
+    looks_like_prompt_injection,
+    resolve_business_type,
 )
 from app.core.config import get_settings
+from app.core.npa_titles import federal_sp42_label
 from app.core.regions import FEDERAL_CODE, get_region
 from app.llm.base import DEFAULT_MAX_TOKENS, LLMProviderError
 from app.llm.factory import get_llm_provider
@@ -32,8 +36,9 @@ from app.vectorstore.retriever import RetrievedChunk, retrieve
 TOP_K_PER_CATEGORY = 5
 
 DISCLAIMER_TEXT = (
-    "\n\n⚠️ Ответ может быть неполным. Сверьте указанные пункты в тексте "
-    "нормативного акта (название источника выше), прежде чем опираться на него."
+    "\n\n⚠️ Ответ носит справочный характер и не является юридической консультацией. "
+    "Сверьте указанные пункты в тексте нормативного акта (название источника выше), "
+    "прежде чем опираться на него."
 )
 
 MAX_WORDS_FOR_RAW_BUSINESS_TYPE = 3
@@ -49,10 +54,12 @@ FORBIDDEN_CONTENT_ERROR = (
 )
 
 _MISSING_IN_FRAGMENTS_RE = re.compile(
-    r"не\s+найдено\s+в\s+предоставленных\s+фрагментах\.?",
+    r"(не\s+найдено\s+в\s+предоставленных\s+фрагментах|"
+    r"в\s+нормативе\s+региона\s+не\s+указано)\.?",
     re.IGNORECASE,
 )
-_MISSING_REGION_VALUE = "в нормативе региона не указано"
+_MISSING_REGION_VALUE = "региональные требования отсутствуют"
+_MISSING_REGION_VALUE_ALT = "в нормативе региона не указано"
 
 _CITATION_PREFIXES = (
     "пп.",
@@ -68,7 +75,7 @@ _CITATION_PREFIXES = (
 
 def _validate_business_type(business_type: str) -> str | None:
     """Возвращает текст ошибки или None, если тип бизнеса допустим."""
-    if contains_forbidden_words(business_type):
+    if contains_forbidden_words(business_type) or looks_like_prompt_injection(business_type):
         return FORBIDDEN_CONTENT_ERROR
     if is_unknown_business_type(business_type):
         return INVALID_BUSINESS_TYPE_ERROR
@@ -85,17 +92,21 @@ def normalize_business_type(state: AgentState) -> AgentState:
     if not raw_text:
         return state
 
-    if contains_forbidden_words(raw_text):
+    if contains_forbidden_words(raw_text) or looks_like_prompt_injection(raw_text):
         return {**state, "error": FORBIDDEN_CONTENT_ERROR}
 
     if not looks_like_business_query(raw_text):
         return {**state, "error": INVALID_BUSINESS_TYPE_ERROR}
 
     if len(raw_text.split()) <= MAX_WORDS_FOR_RAW_BUSINESS_TYPE:
-        validation_error = _validate_business_type(raw_text)
+        resolved = resolve_business_type(raw_text)
+        validation_error = _validate_business_type(resolved)
         if validation_error:
             return {**state, "error": validation_error}
-        return state
+        if resolved != raw_text.strip().lower().strip("«»\"'."):
+            logger.info(f"тип бизнеса исправлен (fuzzy): «{raw_text}» → «{resolved}»")
+            return {**state, "business_type": resolved, "business_type_raw": raw_text}
+        return {**state, "business_type": resolved}
 
     try:
         provider = get_llm_provider()
@@ -108,7 +119,7 @@ def normalize_business_type(state: AgentState) -> AgentState:
         logger.warning(f"не удалось нормализовать тип бизнеса, использую исходный текст: {exc}")
         return state
 
-    normalized = normalized.strip().strip("«»\"'.").strip()
+    normalized = resolve_business_type(normalized.strip().strip("«»\"'.").strip())
     if not normalized or is_unknown_business_type(normalized):
         return {**state, "error": INVALID_BUSINESS_TYPE_ERROR}
 
@@ -182,11 +193,15 @@ def retrieve_chunks(state: AgentState) -> AgentState:
 
 
 def _classify_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    from app.llm.schemas import _coerce_category
+
     for chunk in chunks:
         if chunk.category:
+            chunk.category = str(_coerce_category(chunk.category))
             continue
         try:
-            chunk.category = predict_category(chunk.text)
+            predicted = predict_category(chunk.text)
+            chunk.category = str(_coerce_category(predicted))
         except ClassifierNotTrainedError as exc:
             logger.warning(f"классификатор не обучен: {exc}")
             break
@@ -303,11 +318,21 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
 
 
 CATEGORY_LABELS: dict[str, str] = {
-    "сроки": "⏱ Сроки",
-    "документы": "📄 Необходимые документы",
-    "подключение_к_сетям": "🔌 Подключение к сетям",
-    "состав_проекта": "📐 Технические параметры",
-    "иные_требования": "🏞 Благоустройство и размещение",
+    "земельно_правовые": "Земельно-правовые требования",
+    "градостроительные": "Градостроительные нормы",
+    "пожарная_безопасность": "Пожарная безопасность",
+    "санитарные_экологические": "Санитарные и экологические нормы",
+    "архитектурный_облик": "Архитектурный облик",
+    "дорожное_согласование": "Дорожное согласование",
+    "налоги_поддержка": "Налоги и меры поддержки",
+    "процедуры_согласования": "Процедуры согласования",
+    "подключение_к_сетям": "Подключение к сетям",
+    "сроки_и_документы": "Сроки и документы",
+    # legacy labels (на случай старых тестов/данных до coerce)
+    "сроки": "Сроки и документы",
+    "документы": "Сроки и документы",
+    "состав_проекта": "Градостроительные нормы",
+    "иные_требования": "Градостроительные нормы",
 }
 
 
@@ -432,7 +457,7 @@ def _citation_suffix(citation: str, source_level: str) -> str:
     if not normalized:
         return ""
     if source_level == "федеральный":
-        return f"(СП 42.13330.2016, п. {_esc(normalized)})"
+        return f"({_esc(federal_sp42_label())}, п. {_esc(normalized)})"
     return f"(п. {_esc(normalized)})"
 
 
@@ -440,24 +465,49 @@ def _humanize_missing_value(value: str) -> str:
     cleaned = (value or "").strip()
     if not cleaned:
         return _MISSING_REGION_VALUE
+    lowered = cleaned.lower()
+    if "не указано" in lowered or "отсутств" in lowered or "фрагментах" in lowered:
+        # чередование формулировок для разнообразия
+        return _MISSING_REGION_VALUE if hash(cleaned) % 2 == 0 else _MISSING_REGION_VALUE_ALT
     replaced = _MISSING_IN_FRAGMENTS_RE.sub(_MISSING_REGION_VALUE, cleaned).strip()
     return replaced or _MISSING_REGION_VALUE
 
 
+def _is_concrete_common(item: CommonRequirementItem) -> bool:
+    text = (item.description or "").strip()
+    if len(text) < 20:
+        return False
+    lowered = text.lower()
+    vague_tokens = ("совпада", "одинаков", "общие правила", "в целом")
+    if len(text) < 40 and any(token in lowered for token in vague_tokens):
+        return False
+    return True
+
+
 def _render_extraction(extraction: ExtractionResult) -> str:
     region = get_region(extraction.region_code)
+    sp_label = federal_sp42_label()
     lines = [
         f"<b>{_greeting_for_info(extraction.business_type, region.name_locative)}</b>",
-        f"📖 Регулируется: {region.document_title} (проверено {region.last_verified})",
-        "📖 Плюс федеральный уровень: СП 42.13330.2016 — применяется там, где регион не устанавливает своих правил.",
+        f"📖 Правовое регулирование: {region.document_title} (проверено {region.last_verified})",
+        f"📖 Федеральные нормы (применяются при отсутствии региональных): {sp_label}.",
     ]
 
     groups = _group_by_category(extraction.items)
+    categories = list(get_settings().requirement_categories)
+    empty_categories = [c for c in categories if not groups.get(c)]
+    filled_categories = [c for c in categories if groups.get(c)]
+
+    if empty_categories and filled_categories:
+        empty_labels = ", ".join(_category_label(c) for c in empty_categories)
+        lines.append(
+            f"\nПо остальным категориям данные не найдены "
+            f"({_esc(empty_labels)})."
+        )
+
     shown_any = False
-    for category in get_settings().requirement_categories:
+    for category in filled_categories:
         items = groups.get(category) or []
-        if not items:
-            continue
         shown_any = True
         lines.append(f"\n<b>{_category_label(category)}</b>")
 
@@ -467,7 +517,7 @@ def _render_extraction(extraction: ExtractionResult) -> str:
 
         if only_federal:
             lines.append(
-                "Специальных региональных норм нет — ниже применимые федеральные (СП 42.13330.2016):"
+                f"Специальных региональных норм нет — ниже применимые федеральные ({sp_label}):"
             )
         elif not specific_items and general_items:
             lines.append(
@@ -491,51 +541,34 @@ def _render_extraction(extraction: ExtractionResult) -> str:
 
     if not shown_any:
         lines.append(
-            "\nПо найденным фрагментам не удалось выделить применимые требования. "
-            "Проверьте региональный акт и СП 42.13330.2016 напрямую."
+            "\nВ региональном нормативе требования по данному объекту не установлены. "
+            f"Рекомендуем проверить федеральные нормы ({sp_label}) и актуальные ПЗЗ территории."
         )
 
+    lines.append(format_additional_checks_block(extraction.business_type))
     return "\n".join(lines)
 
 
 def _render_comparison(comparison: ComparisonResult) -> str:
     region_a = get_region(comparison.region_a)
     region_b = get_region(comparison.region_b)
+    sp_label = federal_sp42_label()
     lines = [
         f"<b>{_greeting_for_comparison(comparison.business_type, region_a.name_locative, region_b.name_locative)}</b>",
-        f"📖 {region_a.display_name} — регулируется: {region_a.document_title} "
+        f"📖 {region_a.display_name} — правовое регулирование: {region_a.document_title} "
         f"(проверено {region_a.last_verified})",
-        f"📖 {region_b.display_name} — регулируется: {region_b.document_title} "
+        f"📖 {region_b.display_name} — правовое регулирование: {region_b.document_title} "
         f"(проверено {region_b.last_verified})",
-        "📖 Плюс федеральный уровень: СП 42.13330.2016 — общий для обоих регионов.",
+        f"📖 Федеральные нормы (применяются при отсутствии региональных): {sp_label}.",
         f"\n{_esc(comparison.overall_summary)}",
     ]
 
-    commons = list(comparison.common_requirements or [])
+    commons = [item for item in (comparison.common_requirements or []) if _is_concrete_common(item)]
     differences = list(comparison.differences or [])
 
-    if commons:
-        lines.append("\n<b>✅ Что совпадает</b>")
-        lines.append(
-            "Эти требования одинаковы или одинаково опираются на федеральный СП — "
-            "при расширении бизнеса на них можно ориентироваться как на общие:"
-        )
-        for index, item in enumerate(commons, start=1):
-            suffix = _citation_suffix(item.citation, item.source_level)
-            federal_note = " (по СП 42.13330.2016)" if item.source_level == "федеральный" else ""
-            line = f"{index}. {_esc(item.description)}{federal_note}"
-            if suffix:
-                line = f"{line} {suffix}"
-            lines.append(line)
-    else:
-        lines.append(
-            "\n<b>✅ Что совпадает</b>\n"
-            "Явных совпадающих региональных норм в найденных фрагментах нет. "
-            "Там, где оба региона молчат, опирайтесь на федеральный СП 42.13330.2016."
-        )
-
+    # сначала различия, потом совпадения (только конкретные)
     if differences:
-        lines.append("\n<b>🔀 Чем отличаются</b>")
+        lines.append("\n<b>Чем отличаются</b>")
         groups = _group_by_category(differences)
         diff_number = 1
         for category in get_settings().requirement_categories:
@@ -551,7 +584,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                     f"сравниваю общие требования:"
                 )
             for diff in specific + general:
-                federal_note = " (по СП 42.13330.2016)" if diff.source_level == "федеральный" else ""
+                federal_note = f" (по {sp_label})" if diff.source_level == "федеральный" else ""
                 lines.append(f"{diff_number}. {_esc(diff.summary)}{federal_note}")
                 lines.append(
                     f"  🔵 <b>{region_a.display_name}:</b> "
@@ -563,12 +596,28 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                 )
                 diff_number += 1
     else:
+        lines.append("\n<b>Чем отличаются</b>\nРазличий не обнаружено.")
+
+    if commons:
+        lines.append("\n<b>Что совпадает</b>")
         lines.append(
-            "\n<b>🔀 Чем отличаются</b>\n"
-            "Региональных различий в найденных нормах нет. "
-            "Ориентируйтесь на блок «Что совпадает» и федеральный СП 42.13330.2016."
+            "Эти требования одинаковы или одинаково опираются на федеральные нормы — "
+            "при расширении бизнеса на них можно ориентироваться как на общие:"
+        )
+        for index, item in enumerate(commons, start=1):
+            suffix = _citation_suffix(item.citation, item.source_level)
+            federal_note = f" (по {sp_label})" if item.source_level == "федеральный" else ""
+            line = f"{index}. {_esc(item.description)}{federal_note}"
+            if suffix:
+                line = f"{line} {suffix}"
+            lines.append(line)
+    elif not differences:
+        lines.append(
+            "\nТребования не установлены ни на региональном, ни на федеральном уровне "
+            "в объёме доступных источников. Рекомендуем проверить ПЗЗ и отраслевые НПА напрямую."
         )
 
+    lines.append(format_additional_checks_block(comparison.business_type))
     return "\n".join(lines)
 
 

@@ -13,6 +13,9 @@ def log_query(
     response_text: str,
     region_b: str | None = None,
     telegram_user_id: str | None = None,
+    client_ip: str | None = None,
+    user_agent: str | None = None,
+    error_text: str | None = None,
 ) -> str | None:
     """Пишет запрос в query_logs. При ошибке БД — None, ответ пользователю не роняем."""
     try:
@@ -24,6 +27,9 @@ def log_query(
                 business_type=business_type,
                 answer=response_text,
                 telegram_user_id=telegram_user_id,
+                client_ip=client_ip,
+                user_agent=(user_agent or "")[:256] or None,
+                error_text=error_text,
             )
             session.add(query_log)
             session.flush()
@@ -41,7 +47,28 @@ def save_feedback(query_log_id: str, vote: str) -> bool:
             if query_log is None:
                 return False
             query_log.feedback = vote
+            logger.info(
+                f"feedback recorded vote={vote} query_log_id={query_log_id} "
+                f"mode={query_log.mode} region_a={query_log.region_a}"
+            )
             return True
     except Exception as exc:
         logger.warning(f"не удалось сохранить фидбек для {query_log_id}: {exc}")
         return False
+
+
+def feedback_counts() -> dict[str, int]:
+    """Счётчики 👍/👎 для мониторинга качества."""
+    try:
+        from sqlalchemy import select
+
+        with get_session() as session:
+            votes = session.scalars(
+                select(QueryLog.feedback).where(QueryLog.feedback.isnot(None))
+            ).all()
+        up = sum(1 for vote in votes if vote == "up")
+        down = sum(1 for vote in votes if vote == "down")
+        return {"up": up, "down": down, "total": up + down}
+    except Exception as exc:
+        logger.warning(f"не удалось посчитать feedback: {exc}")
+        return {"up": 0, "down": 0, "total": 0}

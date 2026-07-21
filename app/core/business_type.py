@@ -1,9 +1,29 @@
 from __future__ import annotations
 
+import difflib
 import re
 
 # ответ нормализации, если фраза не про тип бизнес-объекта
 UNKNOWN_BUSINESS_TYPE = "НЕИЗВЕСТНО"
+
+# опечатки вроде «Медьцынский центр» → «медицинский центр»
+FUZZY_MATCH_CUTOFF = 0.65
+MAX_QUERY_LENGTH = 200
+
+_TYPO_ALIASES: dict[str, str] = {
+    "медьцынский центр": "медицинский центр",
+    "медецинский центр": "медицинский центр",
+    "медицинскй центр": "медицинский центр",
+    "автомойкка": "автомойка",
+    "автосервисз": "автосервис",
+}
+
+_INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"ignore\s+(all\s+)?(previous|prior)\s+instructions", re.I),
+    re.compile(r"забудь\s+(все|предыдущ)", re.I),
+    re.compile(r"system\s*prompt", re.I),
+    re.compile(r"<\s*/?\s*system\s*>", re.I),
+)
 
 # явный список запрещённого: секреты, атаки, оффтоп про доступы
 FORBIDDEN_WORDS: tuple[str, ...] = (
@@ -105,6 +125,22 @@ def contains_forbidden_words(text: str) -> bool:
     return any(word in lower for word in FORBIDDEN_WORDS)
 
 
+def fuzzy_match_business_type(value: str) -> str | None:
+    """Ближайший известный тип при опечатке; None — если совпадений нет."""
+    text = (value or "").strip().lower().strip("«»\"'.")
+    if not text:
+        return None
+    if text in _TYPO_ALIASES:
+        return _TYPO_ALIASES[text]
+    matches = difflib.get_close_matches(
+        text,
+        KNOWN_BUSINESS_TYPES,
+        n=1,
+        cutoff=FUZZY_MATCH_CUTOFF,
+    )
+    return matches[0] if matches else None
+
+
 def is_known_business_type(value: str) -> bool:
     """Проверяет, что нормализованный тип похож на один из известных объектов."""
     text = (value or "").strip().lower().strip("«»\"'.")
@@ -113,16 +149,35 @@ def is_known_business_type(value: str) -> bool:
     for known in KNOWN_BUSINESS_TYPES:
         if known == text or known in text or text in known:
             return True
-    return False
+    return fuzzy_match_business_type(text) is not None
+
+
+def resolve_business_type(value: str) -> str:
+    """Канонический тип: точное/подстрочное совпадение или fuzzy."""
+    text = (value or "").strip().lower().strip("«»\"'.")
+    if not text:
+        return text
+    for known in KNOWN_BUSINESS_TYPES:
+        if known == text or known in text or text in known:
+            return known
+    return fuzzy_match_business_type(text) or text
+
+
+def looks_like_prompt_injection(text: str) -> bool:
+    cleaned = text or ""
+    return any(pattern.search(cleaned) for pattern in _INJECTION_PATTERNS)
 
 
 def looks_like_business_query(text: str) -> bool:
     """Грубая проверка до LLM: отсекает оффтоп и явно битый ввод."""
     cleaned = (text or "").strip()
-    if len(cleaned) < 2:
+    if len(cleaned) < 2 or len(cleaned) > MAX_QUERY_LENGTH:
         return False
 
     if contains_forbidden_words(cleaned):
+        return False
+
+    if looks_like_prompt_injection(cleaned):
         return False
 
     letters = sum(ch.isalpha() for ch in cleaned)

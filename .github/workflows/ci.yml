@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # без torch/chromadb/sentence-transformers — unit/integration без GPU-стека
+          pip install fastapi==0.115.6 uvicorn==0.34.0 pydantic==2.10.4 pydantic-settings==2.7.0 \
+            SQLAlchemy==2.0.36 alembic==1.14.0 httpx==0.28.1 loguru==0.7.3 python-dotenv==1.0.1 \
+            PyYAML==6.0.2 prometheus-fastapi-instrumentator==7.0.0 tenacity==9.0.0 \
+            beautifulsoup4==4.12.3 lxml==5.3.0 requests==2.32.3 scikit-learn==1.6.0 \
+            pandas==2.2.3 "numpy>=1.26,<3.0" joblib aiogram
+          pip install -r requirements-dev.txt
+
+      - name: Ruff check
+        continue-on-error: true
+        run: ruff check app tests scripts --select E,F --ignore E501
+
+      - name: Validate curated data
+        run: python -m scripts.validate_data
+
+      - name: Pytest
+        env:
+          WARMUP_ON_START: "off"
+          LLM_CACHE_ENABLED: "false"
+          PYTHONPATH: .
+        run: pytest -q --ignore=tests/test_classifier.py

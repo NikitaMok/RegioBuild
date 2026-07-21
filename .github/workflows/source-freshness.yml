@@ -1,0 +1,22 @@
+name: Source freshness
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          pip install PyYAML==6.0.2 requests==2.32.3 pydantic-settings==2.7.0 pydantic==2.10.4 python-dotenv==1.0.1
+      - name: Check source URLs
+        run: python -m scripts.check_source_freshness
+        continue-on-error: true
