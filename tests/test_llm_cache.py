@@ -21,9 +21,9 @@ class _CountingProvider(LLMProvider):
         return f"answer:{user_prompt}"
 
 
-def test_caching_provider_returns_cached_response() -> None:
+def test_caching_provider_returns_cached_response(tmp_path) -> None:
     inner = _CountingProvider()
-    cached = CachingLLMProvider(inner, maxsize=8)
+    cached = CachingLLMProvider(inner, maxsize=8, persist_path=tmp_path / "llm_cache.json")
 
     first = cached.complete("sys", "user-1")
     second = cached.complete("sys", "user-1")

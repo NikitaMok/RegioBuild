@@ -228,6 +228,10 @@ docker-compose — поэтому api и telegram-бот это два бота 
 образа, роль задаётся через `SERVICE_ROLE`. Локальные `Dockerfile.api` /
 `Dockerfile.bot` Bothost не использует.
 
+Актуальный чеклист env, recreate и smoke: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
+Правовой статус продукта: [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
+**Автодеплой webhook не используем** — после пуша обычно recreate API → `/health` → bot с новым `API_BASE_URL`.
+
 Шаги:
 
 1. Локально прогнать полный пайплайн (`app.ingestion.pipeline`,
@@ -258,8 +262,8 @@ docker-compose — поэтому api и telegram-бот это два бота 
    проде стоит `paraphrase-multilingual-MiniLM-L12-v2` (~470 МБ весов) —
    на Basic Bothost она проходит, более тяжёлый mpnet-base на этом тарифе
    уже не влезал.
-6. После каждого обновления нормативов — повторить шаг 1 и запушить: оба бота
-   передеплоятся по git-пушу автоматически.
+6. После обновления индекса — пуш, затем **ручной recreate** API и bot
+   (см. `docs/BOTHOST_CHECKLIST.md`), не полагаться на автодеплой платформы.
 
 ## Источники нормативов
 

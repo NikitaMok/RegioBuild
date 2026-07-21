@@ -28,6 +28,8 @@ data/backups/
 # DB
 *.db
 *.sqlite3
+llm_cache.json
+**/llm_cache.json
 
 # IDE
 .vscode/

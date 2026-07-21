@@ -31,12 +31,24 @@ def test_info_returns_agent_answer_with_query_log_id(monkeypatch) -> None:
     import app.agent.graph as agent_graph
     import app.api.routes.info as info_route
 
+    captured: dict = {}
+
     monkeypatch.setattr(
         agent_graph,
         "run_info_query",
-        lambda business_type, region_code: {"response_text": "готовый ответ", "error": None},
+        lambda business_type, region_code: {
+            "response_text": "готовый ответ",
+            "error": None,
+            "retrieved_a": [],
+            "retrieved_federal": [],
+        },
     )
-    monkeypatch.setattr(info_route, "log_query", lambda **kwargs: "log-id-123")
+
+    def _fake_log(**kwargs):
+        captured.update(kwargs)
+        return "log-id-123"
+
+    monkeypatch.setattr(info_route, "log_query", _fake_log)
 
     response = client.post("/info", json={"business_type": "кафе", "region_code": "moscow_oblast"})
 
@@ -44,6 +56,9 @@ def test_info_returns_agent_answer_with_query_log_id(monkeypatch) -> None:
     body = response.json()
     assert body["response_text"] == "готовый ответ"
     assert body["query_log_id"] == "log-id-123"
+    assert "retrieved_sections" in captured
+    assert "latency_ms" in captured
+    assert isinstance(captured["latency_ms"], int)
 
 
 def test_info_returns_500_when_agent_raises(monkeypatch) -> None:

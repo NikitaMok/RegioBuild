@@ -17,6 +17,7 @@ from app.core.business_type import (
     resolve_business_type,
 )
 from app.core.config import get_settings
+from app.core.legal import DISCLAIMER_TEXT
 from app.core.npa_titles import (
     federal_sp42_label,
     short_federal_cite_from_citation,
@@ -48,13 +49,6 @@ _RETRIEVAL_QUERY_TEMPLATES: tuple[str, ...] = (
     "{bt} размещение парковка машино-места",
     "{bt} пожарная безопасность 123-ФЗ",
     "{bt} санитарно-защитная зона СанПиН",
-)
-
-DISCLAIMER_TEXT = (
-    "\n\n⚠️ Я справочный помощник и только учусь: ответ не является юридической "
-    "консультацией и не заменяет работу юриста. Требования на муниципальном уровне "
-    "(ПЗЗ и иные акты) могут отличаться. Сверьте указанные пункты в первоисточнике, "
-    "прежде чем опираться на ответ."
 )
 
 # короткие маркеры регионов больше не используем в UI — тематические эмодзи
@@ -628,7 +622,46 @@ def _short_npa_for_item(citation: str, source_level: str, region_code: str) -> s
 
 def _format_item_source(citation: str, source_level: str, region_code: str) -> str:
     npa = _short_npa_for_item(citation, source_level, region_code)
-    return f"({_esc(npa)}, {_esc(_punkt_label(citation))})"
+    level = "федеральный" if source_level == "федеральный" else "региональный"
+    return f"({_esc(level)}: {_esc(npa)}, {_esc(_punkt_label(citation))})"
+
+
+def _sources_verification_block(*region_codes: str) -> str:
+    """Ссылки на первоисточники из regions.yaml для проверки юристом."""
+    lines = ["\n<b>Источники для проверки</b>"]
+    seen: set[str] = set()
+    for code in region_codes:
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        doc = get_region(code)
+        level = "федеральный" if code == FEDERAL_CODE else "региональный"
+        href = html.escape(doc.source_url, quote=True)
+        lines.append(
+            f"• {_esc(level)} — {_esc(short_npa_cite(doc.document_title) if code != FEDERAL_CODE else federal_sp42_label())}: "
+            f'<a href="{href}">открыть первоисточник</a> '
+            f"(актуальность проверена {doc.last_verified})"
+        )
+    return "\n".join(lines)
+
+
+def audit_sections_from_state(state: AgentState) -> list[dict[str, str | None]]:
+    """Сжатый audit trail retrieval для QueryLog (без полного текста чанков)."""
+    rows: list[dict[str, str | None]] = []
+    seen: set[str] = set()
+    for key in ("retrieved_a", "retrieved_b", "retrieved_federal"):
+        for chunk in state.get(key) or []:
+            if chunk.id in seen:
+                continue
+            seen.add(chunk.id)
+            rows.append(
+                {
+                    "chunk_id": chunk.id,
+                    "region_code": chunk.region_code,
+                    "section_number": chunk.section_number,
+                }
+            )
+    return rows
 
 
 def _format_compare_side(
@@ -768,6 +801,7 @@ def _render_extraction(extraction: ExtractionResult) -> str:
         )
 
     lines.append(format_additional_checks_block(extraction.business_type))
+    lines.append(_sources_verification_block(extraction.region_code, FEDERAL_CODE))
     return "\n".join(lines)
 
 
@@ -848,6 +882,9 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         )
 
     lines.append(format_additional_checks_block(comparison.business_type))
+    lines.append(
+        _sources_verification_block(comparison.region_a, comparison.region_b, FEDERAL_CODE)
+    )
     return "\n".join(lines)
 
 

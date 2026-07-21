@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -65,4 +65,6 @@ class QueryLog(Base):
     client_ip: Mapped[str] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str] = mapped_column(String(256), nullable=True)
     error_text: Mapped[str] = mapped_column(Text, nullable=True)
+    retrieved_sections: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

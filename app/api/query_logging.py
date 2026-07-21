@@ -16,6 +16,8 @@ def log_query(
     client_ip: str | None = None,
     user_agent: str | None = None,
     error_text: str | None = None,
+    retrieved_sections: list[dict] | None = None,
+    latency_ms: int | None = None,
 ) -> str | None:
     """Пишет запрос в query_logs. При ошибке БД — None, ответ пользователю не роняем."""
     try:
@@ -30,6 +32,8 @@ def log_query(
                 client_ip=client_ip,
                 user_agent=(user_agent or "")[:256] or None,
                 error_text=error_text,
+                retrieved_sections=retrieved_sections,
+                latency_ms=latency_ms,
             )
             session.add(query_log)
             session.flush()

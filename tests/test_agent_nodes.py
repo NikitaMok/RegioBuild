@@ -208,6 +208,27 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "Что требуется проверить дополнительно" in text
     assert "только учусь" not in text  # дисклеймер в format_response
     assert "объекту капитального строительства" in text
+    assert "Источники для проверки" in text
+    assert "открыть первоисточник" in text
+    assert "региональный:" in text
+
+
+def test_audit_sections_from_state_dedupes_chunks() -> None:
+    from app.vectorstore.types import RetrievedChunk
+
+    chunk = RetrievedChunk(
+        id="c1",
+        text="x",
+        region_code="krasnodar_krai",
+        section_number="5.5.153",
+        category=None,
+        distance=0.1,
+    )
+    rows = nodes.audit_sections_from_state(
+        {"retrieved_a": [chunk], "retrieved_federal": [chunk]}
+    )
+    assert len(rows) == 1
+    assert rows[0]["section_number"] == "5.5.153"
 
 
 def test_citation_suffix_marks_federal_source_explicitly() -> None:
@@ -543,7 +564,7 @@ def test_format_response_appends_disclaimer_on_success() -> None:
         "extraction": ExtractionResult(region_code="moscow_oblast", business_type="склад", items=[]),
     }
     result = nodes.format_response(state)
-    assert "только учусь" in result["response_text"]
+    assert "Справочный помощник RegioBuild" in result["response_text"]
     assert "не является юридической консультацией" in result["response_text"]
     assert "муниципальном" in result["response_text"]
 

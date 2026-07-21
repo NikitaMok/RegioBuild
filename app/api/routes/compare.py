@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
 
+from app.agent.nodes import audit_sections_from_state
 from app.api.query_logging import log_query
 from app.api.rate_limit import RateLimitExceeded, ensure_within_daily_limit
 from app.api.schemas import AgentResponse, CompareRequest
@@ -33,6 +36,7 @@ def compare_regions(payload: CompareRequest, request: Request) -> AgentResponse:
             detail=f"Дневной лимит запросов исчерпан ({exc.limit}). Попробуйте завтра.",
         ) from exc
 
+    started = time.perf_counter()
     try:
         from app.agent.graph import run_compare_query
 
@@ -41,6 +45,7 @@ def compare_regions(payload: CompareRequest, request: Request) -> AgentResponse:
         logger.exception("агент упал с необработанным исключением")
         raise HTTPException(status_code=500, detail=f"внутренняя ошибка агента: {exc}") from exc
 
+    latency_ms = int((time.perf_counter() - started) * 1000)
     response_text = agent_state.get("response_text", "")
     error = agent_state.get("error")
 
@@ -54,6 +59,8 @@ def compare_regions(payload: CompareRequest, request: Request) -> AgentResponse:
         client_ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
         error_text=error,
+        retrieved_sections=audit_sections_from_state(agent_state),
+        latency_ms=latency_ms,
     )
 
     return AgentResponse(
