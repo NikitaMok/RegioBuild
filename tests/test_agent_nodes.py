@@ -93,8 +93,24 @@ class _FakeProvider:
         return self._response
 
 
-def test_normalize_business_type_extracts_short_form_via_llm(monkeypatch) -> None:
-    monkeypatch.setattr(nodes, "get_llm_provider", lambda: _FakeProvider("«склад»"))
+def test_normalize_business_type_extracts_from_long_phrase_without_llm(monkeypatch) -> None:
+    def _fail_if_called():
+        raise AssertionError("при известном типе во фразе LLM не нужен")
+
+    monkeypatch.setattr(nodes, "get_llm_provider", _fail_if_called)
+    raw_text = "Какие требования предъявляются к строительству автомойки в Краснодарском крае?"
+
+    state = nodes.normalize_business_type({"business_type": raw_text})
+
+    assert state["business_type"] == "автомойка"
+    assert state["business_type_raw"] == raw_text
+
+
+def test_normalize_business_type_extracts_warehouse_from_phrase_without_llm(monkeypatch) -> None:
+    def _fail_if_called():
+        raise AssertionError("при известном типе во фразе LLM не нужен")
+
+    monkeypatch.setattr(nodes, "get_llm_provider", _fail_if_called)
     raw_text = "хочу построить склад в Краснодаре, у меня уже есть такой в московской области"
 
     state = nodes.normalize_business_type({"business_type": raw_text})
@@ -116,7 +132,8 @@ def test_normalize_business_type_falls_back_to_raw_text_on_llm_error(monkeypatch
         raise LLMProviderError("сервис недоступен")
 
     monkeypatch.setattr(nodes, "get_llm_provider", _raise_provider_error)
-    raw_text = "хочу построить склад в Краснодаре, у меня уже есть такой в московской области"
+    # фраза без известного типа объекта → уходим в LLM и при ошибке оставляем raw
+    raw_text = "хочу разместить объект обслуживания населения рядом с жилым кварталом"
 
     state = nodes.normalize_business_type({"business_type": raw_text})
     assert state == {"business_type": raw_text}
@@ -208,8 +225,8 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "Что требуется проверить дополнительно" in text
     assert "только учусь" not in text  # дисклеймер в format_response
     assert "объекту капитального строительства" in text
-    assert "Источники для проверки" in text
-    assert "открыть первоисточник" in text
+    assert "Источники для проверки" not in text
+    assert "открыть первоисточник" not in text
     assert "региональный:" in text
 
 

@@ -10,6 +10,7 @@ from app.classifier.predict import ClassifierNotTrainedError, predict_category
 from app.core.additional_checks import format_additional_checks_block
 from app.core.business_type import (
     contains_forbidden_words,
+    extract_known_business_type,
     is_known_business_type,
     is_unknown_business_type,
     looks_like_business_query,
@@ -47,7 +48,6 @@ MAX_FEDERAL_CHUNKS = 6
 _RETRIEVAL_QUERY_TEMPLATES: tuple[str, ...] = (
     "{bt}",
     "{bt} размещение парковка машино-места",
-    "{bt} пожарная безопасность 123-ФЗ",
     "{bt} санитарно-защитная зона СанПиН",
 )
 
@@ -101,7 +101,7 @@ def _validate_business_type(business_type: str) -> str | None:
 
 
 def normalize_business_type(state: AgentState) -> AgentState:
-    """Короткие названия оставляем; длинные фразы сжимаем через LLM перед retrieval."""
+    """Сначала извлекаем известный тип из фразы (без LLM); LLM — только если не вышло."""
     raw_text = (state.get("business_type") or "").strip()
     if not raw_text:
         return state
@@ -111,6 +111,17 @@ def normalize_business_type(state: AgentState) -> AgentState:
 
     if not looks_like_business_query(raw_text):
         return {**state, "error": INVALID_BUSINESS_TYPE_ERROR}
+
+    # длинная фраза «требования к строительству автомойки…» — без вызова LLM
+    extracted = extract_known_business_type(raw_text)
+    if extracted:
+        validation_error = _validate_business_type(extracted)
+        if validation_error:
+            return {**state, "error": validation_error}
+        if extracted != raw_text.strip().lower().strip("«»\"'."):
+            logger.info(f"тип бизнеса извлечён из фразы: «{raw_text}» → «{extracted}»")
+            return {**state, "business_type": extracted, "business_type_raw": raw_text}
+        return {**state, "business_type": extracted}
 
     if len(raw_text.split()) <= MAX_WORDS_FOR_RAW_BUSINESS_TYPE:
         resolved = resolve_business_type(raw_text)
@@ -626,25 +637,6 @@ def _format_item_source(citation: str, source_level: str, region_code: str) -> s
     return f"({_esc(level)}: {_esc(npa)}, {_esc(_punkt_label(citation))})"
 
 
-def _sources_verification_block(*region_codes: str) -> str:
-    """Ссылки на первоисточники из regions.yaml для проверки юристом."""
-    lines = ["\n<b>Источники для проверки</b>"]
-    seen: set[str] = set()
-    for code in region_codes:
-        if not code or code in seen:
-            continue
-        seen.add(code)
-        doc = get_region(code)
-        level = "федеральный" if code == FEDERAL_CODE else "региональный"
-        href = html.escape(doc.source_url, quote=True)
-        lines.append(
-            f"• {_esc(level)} — {_esc(short_npa_cite(doc.document_title) if code != FEDERAL_CODE else federal_sp42_label())}: "
-            f'<a href="{href}">открыть первоисточник</a> '
-            f"(актуальность проверена {doc.last_verified})"
-        )
-    return "\n".join(lines)
-
-
 def audit_sections_from_state(state: AgentState) -> list[dict[str, str | None]]:
     """Сжатый audit trail retrieval для QueryLog (без полного текста чанков)."""
     rows: list[dict[str, str | None]] = []
@@ -801,7 +793,6 @@ def _render_extraction(extraction: ExtractionResult) -> str:
         )
 
     lines.append(format_additional_checks_block(extraction.business_type))
-    lines.append(_sources_verification_block(extraction.region_code, FEDERAL_CODE))
     return "\n".join(lines)
 
 
@@ -882,9 +873,6 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         )
 
     lines.append(format_additional_checks_block(comparison.business_type))
-    lines.append(
-        _sources_verification_block(comparison.region_a, comparison.region_b, FEDERAL_CODE)
-    )
     return "\n".join(lines)
 
 

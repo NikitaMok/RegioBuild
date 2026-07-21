@@ -43,6 +43,14 @@
       "federal_sections": ["СанПиН/7.1.5"]
     },
     {
+      "id": "warehouse-mo",
+      "business_type": "склад",
+      "region": "moscow_oblast",
+      "must_find_sections": ["прил.10", "5.26", "МО-доп/склад"],
+      "must_find_any_of": true,
+      "federal_sections": ["СанПиН/7.1.4", "123-ФЗ/69"]
+    },
+    {
       "id": "carwash-no",
       "business_type": "автомойка",
       "region": "novosibirsk_oblast",

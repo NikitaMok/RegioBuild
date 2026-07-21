@@ -3,8 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 # лимит ответа модели: иначе длинные compare/info обрываются на полуслове
-# 3800 — быстрее/дешевле на GigaChat при сохранении полного JSON
-DEFAULT_MAX_TOKENS = 3800
+# 2800 — быстрее на GigaChat; grounding отсекает лишнее
+DEFAULT_MAX_TOKENS = 2800
 
 
 class LLMProvider(ABC):

@@ -146,6 +146,8 @@ def is_known_business_type(value: str) -> bool:
     text = (value or "").strip().lower().strip("«»\"'.")
     if not text:
         return False
+    if extract_known_business_type(text) is not None:
+        return True
     for known in KNOWN_BUSINESS_TYPES:
         if known == text or known in text or text in known:
             return True
@@ -157,10 +159,60 @@ def resolve_business_type(value: str) -> str:
     text = (value or "").strip().lower().strip("«»\"'.")
     if not text:
         return text
-    for known in KNOWN_BUSINESS_TYPES:
-        if known == text or known in text or text in known:
-            return known
+    extracted = extract_known_business_type(text)
+    if extracted:
+        return extracted
     return fuzzy_match_business_type(text) or text
+
+
+# корни для падежей: «автомойки» / «автомоек» → «автомойка»
+_BUSINESS_TYPE_STEMS: dict[str, tuple[str, ...]] = {
+    "автомойка": ("автомойк", "автомоек", "моечн"),
+    "автосервис": ("автосервис",),
+    "азс": ("азс", "автозаправ"),
+    "автозаправка": ("азс", "автозаправ"),
+    "склад": ("склад",),
+    "складской комплекс": ("складск",),
+    "складское помещение": ("складск",),
+    "логистический центр": ("логистич",),
+    "логистический комплекс": ("логистич",),
+    "торговый центр": ("торговый центр", "торгов"),
+    "магазин": ("магазин",),
+    "кафе": ("кафе",),
+    "ресторан": ("ресторан",),
+    "гостиница": ("гостиниц",),
+    "отель": ("отел",),
+    "медицинский центр": ("медицинск", "медцентр"),
+    "медцентр": ("медцентр", "медицинск"),
+    "поликлиника": ("поликлиник",),
+    "офис": ("офис",),
+    "офисное здание": ("офисн",),
+    "производственное здание": ("производственн",),
+    "цех": ("цех",),
+    "завод": ("завод",),
+}
+
+
+def extract_known_business_type(text: str) -> str | None:
+    """Достаёт известный тип из длинной фразы, в т.ч. в падежах («автомойки»)."""
+    lower = (text or "").strip().lower()
+    if not lower:
+        return None
+
+    # сначала длинные названия, чтобы «медицинский центр» победил «центр»
+    for known in sorted(KNOWN_BUSINESS_TYPES, key=len, reverse=True):
+        if known in lower:
+            return known
+
+    for known, stems in _BUSINESS_TYPE_STEMS.items():
+        if any(len(stem) >= 3 and stem in lower for stem in stems):
+            return known
+
+    for known in sorted(KNOWN_BUSINESS_TYPES, key=len, reverse=True):
+        stem = known[:-1] if len(known) > 5 and known[-1] in "аяыи" else known
+        if len(stem) >= 5 and stem in lower:
+            return known
+    return None
 
 
 def looks_like_prompt_injection(text: str) -> bool:
