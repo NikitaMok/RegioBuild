@@ -3,7 +3,14 @@ from __future__ import annotations
 from app.agent import nodes
 from app.core.business_type import contains_forbidden_words, is_known_business_type, looks_like_business_query
 from app.llm.base import LLMProviderError
-from app.llm.schemas import ComparisonResult, DifferenceItem, ExtractionResult, RequirementItem
+from app.llm.schemas import (
+    CommonRequirementItem,
+    ComparisonResult,
+    DifferenceItem,
+    ExtractionResult,
+    RequirementItem,
+)
+from app.vectorstore.retriever import RetrievedChunk
 
 
 def test_understand_query_requires_business_type() -> None:
@@ -167,10 +174,10 @@ def test_greeting_for_info_mentions_business_and_region() -> None:
 
 
 def test_greeting_for_comparison_mentions_business_and_both_regions() -> None:
-    greeting = nodes._greeting_for_comparison("склад", "Московская область", "Краснодарский край")
+    greeting = nodes._greeting_for_comparison("склад", "Московской области", "Краснодарском крае")
     assert "«склад»" in greeting
-    assert "Московская область" in greeting
-    assert "Краснодарский край" in greeting
+    assert "в Московской области" in greeting
+    assert "в Краснодарском крае" in greeting
 
 
 def test_render_extraction_includes_greeting_regulator_category_and_citation() -> None:
@@ -187,7 +194,9 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "Регулируется" in text
     assert "⏱ Сроки" in text
     assert "п. 3.2" in text
-    assert "В региональном акте по этой категории ничего не найдено." in text
+    # пустые категории больше не шумят в ответе
+    assert "В региональном акте по этой категории ничего не найдено." not in text
+    assert "📄 Необходимые документы" not in text
 
 
 def test_citation_suffix_marks_federal_source_explicitly() -> None:
@@ -262,6 +271,13 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
         region_b="krasnodar_krai",
         business_type="склад",
         overall_summary="Требования почти совпадают.",
+        common_requirements=[
+            CommonRequirementItem(
+                category="иные_требования",
+                description="Парковки считаются по общим правилам.",
+                citation="5.1",
+            )
+        ],
         differences=[
             DifferenceItem(
                 category="сроки",
@@ -274,10 +290,17 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
     text = nodes._render_comparison(comparison)
 
     assert "Требования почти совпадают" in text
+    assert "в Московской области" in text
+    assert "в Краснодарском крае" in text
+    assert "Что совпадает" in text
+    assert "Чем отличаются" in text
+    assert "1. Парковки" in text
+    assert "1. Срок выдачи отличается" in text
     assert "10 дней" in text
     assert "15 дней" in text
     assert "🔵" in text
     assert "🟢" in text
+    assert "По этой категории различий" not in text
 
 
 def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:
@@ -293,6 +316,7 @@ def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:
     assert "N 713/30" in text
     assert "N 78" in text
     assert text.index("N 713/30") < text.index("N 78")
+    assert "Региональных различий в найденных нормах нет" in text
 
 
 def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
@@ -336,6 +360,51 @@ def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> 
 
     assert "Специальных норм" in text
     assert "общие требования" in text
+
+
+def test_citation_matches_chunks_accepts_known_section() -> None:
+    chunks = [
+        RetrievedChunk(
+            id="1",
+            text="норма",
+            region_code="moscow_oblast",
+            section_number="5.5.153",
+            category=None,
+            distance=0.1,
+        )
+    ]
+    assert nodes._citation_matches_chunks("5.5.153", chunks)
+    assert nodes._citation_matches_chunks("п. 5.5.153", chunks)
+    assert not nodes._citation_matches_chunks("725", chunks)
+
+
+def test_filter_grounded_items_drops_hallucinated_citations() -> None:
+    chunks = [
+        RetrievedChunk(
+            id="1",
+            text="норма",
+            region_code="sverdlovsk_oblast",
+            section_number="1.2",
+            category=None,
+            distance=0.1,
+        )
+    ]
+    items = [
+        RequirementItem(category="документы", description="Реальное.", citation="1.2"),
+        RequirementItem(category="документы", description="Выдумка.", citation="725"),
+    ]
+    grounded = nodes._filter_grounded_items(items, chunks)
+    assert len(grounded) == 1
+    assert grounded[0].citation == "1.2"
+
+
+def test_replace_region_placeholders_uses_display_names() -> None:
+    text = "Только в регионе А установлены требования; в регионе B их нет."
+    cleaned = nodes._replace_region_placeholders(text, "Московская область", "Краснодарский край")
+    assert "регионе А" not in cleaned
+    assert "регионе B" not in cleaned
+    assert "Московская область" in cleaned
+    assert "Краснодарский край" in cleaned
 
 
 def test_format_response_appends_disclaimer_on_success() -> None:

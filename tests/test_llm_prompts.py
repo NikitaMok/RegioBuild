@@ -47,3 +47,5 @@ def test_comparison_prompt_includes_shared_federal_block() -> None:
     assert "Норма региона B" in prompt
     assert "Федеральная норма" in prompt
     assert "общий фон для обоих регионов" in prompt
+    assert "common_requirements" in prompt
+    assert "Московская область" in prompt

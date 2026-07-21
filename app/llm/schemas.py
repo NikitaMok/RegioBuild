@@ -80,11 +80,30 @@ class DifferenceItem(BaseModel):
         return _coerce_category(value)
 
 
+class CommonRequirementItem(BaseModel):
+    """Норма, которая совпадает или одинаково применима в обоих регионах."""
+
+    category: RequirementCategory
+    description: str
+    citation: str = Field(default="", description="номер пункта, если есть в фрагментах")
+    is_specific: bool = True
+    source_level: SourceLevel = "региональный"
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def _normalize_category(cls, value: object) -> object:
+        return _coerce_category(value)
+
+
 class ComparisonResult(BaseModel):
     region_a: str
     region_b: str
     business_type: str
     overall_summary: str = Field(
-        description="1-2 предложения простым языком: требования в целом похожи или заметно различаются"
+        description="1-2 предложения простым языком: что совпадает и что отличается при расширении бизнеса"
+    )
+    common_requirements: list[CommonRequirementItem] = Field(
+        default_factory=list,
+        description="требования, которые совпадают или одинаково опираются на федеральный СП",
     )
     differences: list[DifferenceItem] = Field(default_factory=list)
