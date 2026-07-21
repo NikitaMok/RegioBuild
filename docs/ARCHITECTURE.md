@@ -11,7 +11,7 @@ flowchart TD
     Bot --> API[FastAPI Backend]
     API --> Agent[LangGraph Agent]
 
-    subgraph AgentFlow [LangGraph orchestration]
+    subgraph AgentFlow [LangGraph]
         N0[normalize_business_type] --> N1[understand_query]
         N1 --> N2[retrieve_chunks]
         N2 --> N3[classify_requirements]
@@ -52,8 +52,8 @@ flowchart TD
 - **Citation grounding.** Пункты из ответа LLM сверяются с retrieved-чанками;
   выдуманные номера отбрасываются. При пустом usable retrieval — честный отказ,
   без галлюцинаций «от себя».
-- **API отдельно от бота.** Telegram — один из клиентов. Тот же FastAPI можно
-  повесить на веб, B2B-кабинет или чужой продукт.
+- **API отдельно от бота.** Telegram — один из клиентов; тот же FastAPI
+  можно дернуть из своего сервиса.
 
 ## Runtime-роли
 

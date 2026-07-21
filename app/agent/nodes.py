@@ -490,15 +490,15 @@ def _group_by_category(items: list) -> dict[str, list]:
 
 def _greeting_for_info(business_type: str, region_locative: str) -> str:
     return (
-        f"По вашему запросу подготовлен обзор требований к объекту капитального "
-        f"строительства «{_esc(business_type)}» в {region_locative}."
+        f"Требования к объекту капитального строительства "
+        f"«{_esc(business_type)}» в {region_locative}."
     )
 
 
 def _greeting_for_comparison(business_type: str, region_a_locative: str, region_b_locative: str) -> str:
     return (
-        f"Подготовлен сравнительный анализ требований к объекту капитального "
-        f"строительства «{_esc(business_type)}» в {region_a_locative} и в {region_b_locative}."
+        f"Сравнение требований к объекту капитального строительства "
+        f"«{_esc(business_type)}» в {region_a_locative} и в {region_b_locative}."
     )
 
 
@@ -737,7 +737,7 @@ def _humanize_missing_value(value: str) -> str:
         return _MISSING_REGION_VALUE
     lowered = cleaned.lower()
     if "не указано" in lowered or "отсутств" in lowered or "фрагментах" in lowered:
-        # чередование формулировок для разнообразия
+        # если модель пишет «не указано» разными словами — сводим к одной фразе
         return _MISSING_REGION_VALUE if hash(cleaned) % 2 == 0 else _MISSING_REGION_VALUE_ALT
     replaced = _MISSING_IN_FRAGMENTS_RE.sub(_MISSING_REGION_VALUE, cleaned).strip()
     return replaced or _MISSING_REGION_VALUE
@@ -799,9 +799,9 @@ def _render_extraction(extraction: ExtractionResult) -> str:
 
     if not has_regional and not has_federal:
         lines.append(
-            "\nИтого: требования не найдены ни на региональном, ни на федеральном уровне "
-            "в доступных источниках. Рекомендуем проверить муниципальные ПЗЗ и отраслевые НПА; "
-            "ответ помощника нужно перепроверить самостоятельно."
+            "\nИтого: в доступных источниках требования не найдены ни на "
+            "региональном, ни на федеральном уровне. Имеет смысл сверить "
+            "муниципальные ПЗЗ и отраслевые НПА отдельно."
         )
 
     lines.append(format_additional_checks_block(extraction.business_type))
@@ -870,8 +870,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
     if commons:
         lines.append("\n<b>Что совпадает</b>")
         lines.append(
-            "Эти требования одинаковы или одинаково опираются на федеральные нормы — "
-            "при расширении бизнеса на них можно ориентироваться как на общие:"
+            "Эти требования совпадают или одинаково опираются на федеральные нормы:"
         )
         for index, item in enumerate(commons, start=1):
             source_code = FEDERAL_CODE if item.source_level == "федеральный" else comparison.region_a
@@ -894,7 +893,7 @@ def format_response(state: AgentState) -> AgentState:
 
     prefix = ""
     if state.get("business_type_raw"):
-        prefix = f"<i>Распознанный тип бизнеса: «{_esc(state['business_type'])}»</i>\n\n"
+        prefix = f"<i>Тип объекта: «{_esc(state['business_type'])}»</i>\n\n"
 
     if state["mode"] == "info" and state.get("extraction"):
         body = _render_extraction(state["extraction"])

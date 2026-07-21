@@ -31,9 +31,10 @@ data/backups/
 llm_cache.json
 **/llm_cache.json
 
-# IDE
+# IDE / локальные настройки редактора
 .vscode/
 .idea/
+.cursor/
 
 # OS
 .DS_Store

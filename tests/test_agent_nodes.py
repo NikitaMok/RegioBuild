@@ -187,7 +187,7 @@ def test_greeting_for_info_mentions_business_and_region() -> None:
     greeting = nodes._greeting_for_info("склад", "Московской области")
     assert "«склад»" in greeting
     assert "Московской области" in greeting
-    assert "подготовлен обзор требований" in greeting
+    assert "Требования к объекту капитального строительства" in greeting
 
 
 def test_greeting_for_comparison_mentions_business_and_both_regions() -> None:
@@ -195,7 +195,7 @@ def test_greeting_for_comparison_mentions_business_and_both_regions() -> None:
     assert "«склад»" in greeting
     assert "в Московской области" in greeting
     assert "в Краснодарском крае" in greeting
-    assert "сравнительный анализ" in greeting
+    assert "Сравнение требований" in greeting
 
 
 def test_render_extraction_includes_greeting_regulator_category_and_citation() -> None:
@@ -212,7 +212,7 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     )
     text = nodes._render_extraction(extraction)
 
-    assert "подготовлен обзор требований" in text
+    assert "Требования к объекту капитального строительства" in text
     assert "«склад»" in text
     assert "в Московской области" in text
     assert "Правовое регулирование (регион)" in text
@@ -594,7 +594,9 @@ def test_format_response_shows_normalized_business_type_prefix() -> None:
         "extraction": ExtractionResult(region_code="moscow_oblast", business_type="склад", items=[]),
     }
     result = nodes.format_response(state)
-    assert "Распознанный тип бизнеса" in result["response_text"]
+    assert "Тип объекта:" in result["response_text"]
+    assert "«склад»" in result["response_text"]
+    assert "Распознанный тип бизнеса" not in result["response_text"]
 
 
 def test_format_response_escapes_error_message() -> None:
