@@ -112,6 +112,7 @@ def main() -> None:
                     "section_number": curated.section_number,
                     "document_id": docs_by_label[label].id,
                     "category": curated.category or "",
+                    "business_types": ",".join(curated.business_types),
                 }
             )
 

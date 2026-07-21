@@ -1,0 +1,54 @@
+{
+  "wave": 1,
+  "description": "Эталонные пункты для коммерческого размещения (объект × регион)",
+  "cases": [
+    {
+      "id": "carwash-kk",
+      "business_type": "автомойка",
+      "region": "krasnodar_krai",
+      "must_find_sections": ["5.5.153", "табл.108", "4.3.20"],
+      "must_find_any_of": true,
+      "federal_sections": ["СанПиН/7.1.3"]
+    },
+    {
+      "id": "carwash-rt",
+      "business_type": "автомойка",
+      "region": "tatarstan",
+      "must_find_sections": ["5.2.258", "5.2.257"],
+      "must_find_any_of": true,
+      "federal_sections": ["СанПиН/7.1.3"]
+    },
+    {
+      "id": "warehouse-so",
+      "business_type": "склад",
+      "region": "sverdlovsk_oblast",
+      "must_find_sections": ["СО-доп/склад", "СанПиН/7.1.4", "123-ФЗ/69"],
+      "must_find_any_of": true,
+      "federal_sections": ["123-ФЗ/69", "СанПиН/7.1.4"]
+    },
+    {
+      "id": "mall-kk",
+      "business_type": "торговый центр",
+      "region": "krasnodar_krai",
+      "must_find_sections": ["табл.108", "5.5.153"],
+      "must_find_any_of": true,
+      "federal_sections": []
+    },
+    {
+      "id": "azs-rt",
+      "business_type": "азс",
+      "region": "tatarstan",
+      "must_find_sections": ["5.2.256", "СанПиН/7.1.5"],
+      "must_find_any_of": true,
+      "federal_sections": ["СанПиН/7.1.5"]
+    },
+    {
+      "id": "carwash-no",
+      "business_type": "автомойка",
+      "region": "novosibirsk_oblast",
+      "must_find_sections": ["НО-доп/автомойка", "СанПиН/7.1.3"],
+      "must_find_any_of": true,
+      "federal_sections": ["СанПиН/7.1.3"]
+    }
+  ]
+}

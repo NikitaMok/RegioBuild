@@ -190,6 +190,8 @@ def _chunk_mentions_business(chunk: RetrievedChunk, business_type: str) -> bool:
 _BUSINESS_MENTION_STEMS: dict[str, tuple[str, ...]] = {
     "автомойка": ("автомойк", "автомоек", "моечн"),
     "автосервис": ("автосервис", "техническ", "станци"),
+    "азс": ("азс", "автозаправ", "топливораздаточ"),
+    "автозаправка": ("азс", "автозаправ", "топливораздаточ"),
     "склад": ("склад",),
     "складской комплекс": ("склад",),
     "складское помещение": ("склад",),
@@ -198,10 +200,18 @@ _BUSINESS_MENTION_STEMS: dict[str, tuple[str, ...]] = {
     "торговый центр": ("торгов", "торговый центр", "тц", "магазин"),
     "тц": ("торгов", "торговый центр", "тц"),
     "магазин": ("магазин", "торгов"),
+    "кафе": ("кафе", "ресторан", "питан"),
+    "ресторан": ("ресторан", "кафе", "питан"),
+    "гостиница": ("гостиниц", "отел", "размещен"),
+    "отель": ("гостиниц", "отел", "размещен"),
     "медицинский центр": ("медицин", "поликлиник", "больниц", "лпу"),
     "медцентр": ("медицин", "поликлиник", "больниц"),
+    "поликлиника": ("поликлиник", "медицин", "больниц"),
     "офис": ("офис", "административ"),
     "офисное здание": ("офис", "административ"),
+    "производство": ("производ", "завод", "цех"),
+    "цех": ("цех", "производ", "завод"),
+    "завод": ("завод", "производ", "цех"),
 }
 
 
@@ -264,20 +274,38 @@ def retrieve_chunks(state: AgentState) -> AgentState:
     )
     logger.info(f"федеральный уровень: найдено {len(chunks_federal)} чанков")
 
+    # отбрасываем табличный мусор перед LLM; если нечего опереться — честный отказ
+    chunks_a = _filter_usable_chunks(chunks_a)
+    chunks_federal = _filter_usable_chunks(chunks_federal)
+
     new_state: AgentState = {**state, "retrieved_a": chunks_a, "retrieved_federal": chunks_federal}
 
     if state.get("mode") == "compare" and state.get("region_b"):
-        chunks_b = _retrieve_for_region(business_type, state["region_b"])
+        chunks_b = _filter_usable_chunks(_retrieve_for_region(business_type, state["region_b"]))
         logger.info(f"регион B ({state['region_b']}): найдено {len(chunks_b)} чанков")
         new_state["retrieved_b"] = chunks_b
+    else:
+        chunks_b = []
 
-    if not chunks_a and not chunks_federal:
+    if not chunks_a and not chunks_federal and not chunks_b:
         new_state["error"] = (
-            "Не нашлось релевантных фрагментов норматива. Проверьте, что ingestion "
-            "и построение векторного индекса были выполнены."
+            "В доступных источниках (РНГП регионов, СП 42, выдержки 123-ФЗ/СанПиН) "
+            "не найдено проверяемых нормативных фрагментов по этому объекту. "
+            "Рекомендуем сверить муниципальные ПЗЗ и отраслевые НПА напрямую."
         )
 
     return new_state
+
+
+def _filter_usable_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """Оставляет чанки с надёжной нумерацией; иначе LLM опирается на мусор и галлюцинирует."""
+    if not chunks:
+        return []
+    good = [c for c in chunks if _section_rank_quality(c.section_number) >= 2]
+    if good:
+        return good
+    mid = [c for c in chunks if _section_rank_quality(c.section_number) >= 1]
+    return mid
 
 
 def _classify_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:

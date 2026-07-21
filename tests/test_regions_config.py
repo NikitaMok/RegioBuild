@@ -40,6 +40,10 @@ def test_curated_krasnodar_carwash_and_sanpin_meters() -> None:
     assert "50" in by_section["СанПиН/7.1.3"].text
     assert "123-ФЗ/69" in by_section
     assert "СанПиН/7.1.4" in by_section
+    assert "СанПиН/7.1.5" in by_section
     assert "5.2.258" in by_section
     assert by_section["5.2.258"].region_code == "tatarstan"
+    assert "НО-доп/автомойка" in by_section
+    assert "СО-доп/склад" in by_section
+    assert any(c.business_types for c in chunks)
 
