@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from contextlib import asynccontextmanager
 
@@ -24,11 +25,19 @@ def _warmup_models() -> None:
         logger.exception("прогрев embedder/chroma не удался — API всё равно слушает порт")
 
 
+def _warmup_enabled() -> bool:
+    return os.getenv("WARMUP_ON_START", "false").strip().lower() in {"1", "true", "yes"}
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # порт уже открыт; модель грузим после, чтобы /health не таймаутился
-    thread = threading.Thread(target=_warmup_models, name="warmup-embedder", daemon=True)
-    thread.start()
+    # На Bothost прогрев MiniLM при старте часто убивает контейнер по RAM (рестарт-цикл).
+    # По умолчанию модель грузится лениво на первом /info|/compare.
+    if _warmup_enabled():
+        thread = threading.Thread(target=_warmup_models, name="warmup-embedder", daemon=True)
+        thread.start()
+    else:
+        logger.info("прогрев при старте отключён (WARMUP_ON_START) — модель на первом запросе")
     yield
 
 
