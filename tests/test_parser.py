@@ -41,3 +41,23 @@ def test_split_into_sections_handles_nested_numbering() -> None:
 
     assert len(sections) == 1
     assert sections[0].number == "4.5.2"
+
+
+def test_split_into_sections_does_not_treat_table_columns_as_points() -> None:
+    text = (
+        "5.5.153 Требуемое количество машино-мест определяется по таблице 108.\n"
+        "Таблица 108 Рекреационные территории | Расчетная единица | количество машино-мест\n"
+        "1 | 2 | 3 Здания и сооружения | Здания и сооружения\n"
+        "Станции технического обслуживания, автомойки | 1 бокс | 1\n"
+        "300 | 1,2\n"
+        "5.5.154 Автостоянки в пределах городских улиц проектируются закрытыми.\n"
+    )
+    sections = split_into_sections(text, min_section_chars=10)
+    numbers = [section.number for section in sections]
+    assert "5.5.153" in numbers
+    assert "5.5.154" in numbers
+    assert "1" not in numbers
+    assert "300" not in numbers
+    table_sections = [s for s in sections if s.number and s.number.startswith("табл.")]
+    assert table_sections
+    assert any("автомойки" in (s.text or "") for s in table_sections)

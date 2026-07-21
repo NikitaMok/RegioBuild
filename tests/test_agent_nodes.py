@@ -428,6 +428,25 @@ def test_citation_matches_chunks_accepts_known_section() -> None:
     assert not nodes._citation_matches_chunks("725", chunks)
 
 
+def test_chunk_mentions_business_handles_carwash_morphology() -> None:
+    chunk = RetrievedChunk(
+        id="1",
+        text="Станции технического обслуживания, автомойки | 1 бокс | 1",
+        region_code="krasnodar_krai",
+        section_number="табл.108",
+        category=None,
+        distance=0.1,
+    )
+    assert nodes._chunk_mentions_business(chunk, "автомойка")
+    assert not nodes._chunk_mentions_business(chunk, "склад")
+
+
+def test_section_rank_quality_prefers_dotted_over_table_junk() -> None:
+    assert nodes._section_rank_quality("5.5.153") > nodes._section_rank_quality("1")
+    assert nodes._section_rank_quality("табл.108") > nodes._section_rank_quality("300")
+    assert nodes._section_rank_quality("СанПиН/7.1.3") >= nodes._section_rank_quality("5.5.153")
+
+
 def test_citation_rejects_prefix_against_ambiguous_section_one() -> None:
     """section_number='1' из таблиц не должен подтверждать выдуманные 1.x / 15."""
     chunks = [

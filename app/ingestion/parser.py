@@ -13,6 +13,11 @@ from docx.text.paragraph import Paragraph
 # Пункты РНГП нумеруются в начале строки: "1.", "2.3", "4.5.2." и т.д.
 SECTION_NUMBER_PATTERN = re.compile(r"^(\d{1,3}(?:\.\d{1,3}){0,4})\.?\s+(\S.*)$")
 
+# строки таблиц вида «1 | 2 | 3 …» или «300 | 1,2» — не пункты НПА
+_TABLE_ROW_AFTER_NUMBER = re.compile(r"^\|")
+_TABLE_CELLS = re.compile(r"\s\|\s")
+_TABLE_TITLE = re.compile(r"Таблица\s+(\d+)", re.IGNORECASE)
+
 # meganorm отдаёт XHTML с <?xml ...?> — bs4 ругается, пролог срезаем
 XML_PROLOG_PATTERN = re.compile(rb"^\s*<\?xml[^>]*\?>\s*")
 
@@ -38,27 +43,66 @@ def extract_text_from_html(html: bytes | str) -> str:
     return "\n".join(line for line in lines if line)
 
 
+def _is_real_section_header(number: str, rest: str) -> bool:
+    """Отсекает колонки/ячейки таблиц, которые regex путает с пунктами НПА."""
+    cleaned = (rest or "").strip()
+    if not cleaned:
+        return False
+    if _TABLE_ROW_AFTER_NUMBER.match(cleaned) or cleaned.startswith("|"):
+        return False
+    # «1 | 2 | 3 Заголовок» — нумерация колонок таблицы
+    if _TABLE_CELLS.search(cleaned):
+        return False
+    # вместимость/площадь вроде «300 | 1,2» уже отсечена выше; голые 100+ без точки
+    # часто ячейки таблиц, попавшие в начало строки после разбиения docx
+    if "." not in number and number.isdigit() and int(number) >= 100:
+        return False
+    return True
+
+
 def split_into_sections(text: str, min_section_chars: int = 40) -> list[Section]:
     """Разбивает текст на пронумерованные пункты; строки без номера — продолжение текущего."""
     sections: list[Section] = []
     current_number: str | None = None
     current_lines: list[str] = []
+    active_table: str | None = None
 
     def flush_current_section() -> None:
+        nonlocal current_number, current_lines
         if not current_lines:
             return
         text_joined = " ".join(current_lines).strip()
         if current_number is not None or len(text_joined) >= min_section_chars:
             sections.append(Section(number=current_number, text=text_joined))
+        current_lines = []
 
     for line in text.splitlines():
+        table_match = _TABLE_TITLE.search(line)
+        if table_match:
+            active_table = f"табл.{table_match.group(1)}"
+
         match = SECTION_NUMBER_PATTERN.match(line)
-        if match:
+        if match and _is_real_section_header(match.group(1), match.group(2)):
             flush_current_section()
             current_number = match.group(1)
             current_lines = [match.group(2)]
+            # новый «настоящий» пункт сбрасывает привязку к таблице
+            if "." in current_number:
+                active_table = None
         else:
-            current_lines.append(line)
+            # строки таблицы без пункта — копим под табл.N, а не под чужим/фейковым номером
+            is_table_line = bool(
+                _TABLE_CELLS.search(line) or line.strip().startswith("|")
+            )
+            if active_table and is_table_line:
+                if current_number != active_table:
+                    flush_current_section()
+                    current_number = active_table
+                    current_lines = [line]
+                else:
+                    current_lines.append(line)
+            else:
+                current_lines.append(line)
 
     flush_current_section()
     return sections

@@ -175,9 +175,50 @@ def _chunk_mentions_business(chunk: RetrievedChunk, business_type: str) -> bool:
     if not needle:
         return False
     text = (chunk.text or "").lower()
-    # «автомойка» ↔ «автомойки»; короткие типы — без обрезания
+    # морфология/синонимы: «автомойка» ↔ «автомоек», «склад» ↔ «складск…»
+    stems = _BUSINESS_MENTION_STEMS.get(needle)
+    if stems:
+        return any(stem in text for stem in stems)
+    if needle in text:
+        return True
+    # «автомойка» → «автомойк»; короткие типы — без обрезания
     stem = needle[:-1] if len(needle) > 5 and needle.endswith(("а", "я", "ы", "и")) else needle
-    return needle in text or (len(stem) >= 4 and stem in text)
+    return len(stem) >= 4 and stem in text
+
+
+# леммы/корни для boost retrieval (иначе «автомойка» не видит «автомоек» в таблице)
+_BUSINESS_MENTION_STEMS: dict[str, tuple[str, ...]] = {
+    "автомойка": ("автомойк", "автомоек", "моечн"),
+    "автосервис": ("автосервис", "техническ", "станци"),
+    "склад": ("склад",),
+    "складской комплекс": ("склад",),
+    "складское помещение": ("склад",),
+    "логистический центр": ("логистич", "склад"),
+    "логистический комплекс": ("логистич", "склад"),
+    "торговый центр": ("торгов", "торговый центр", "тц", "магазин"),
+    "тц": ("торгов", "торговый центр", "тц"),
+    "магазин": ("магазин", "торгов"),
+    "медицинский центр": ("медицин", "поликлиник", "больниц", "лпу"),
+    "медцентр": ("медицин", "поликлиник", "больниц"),
+    "офис": ("офис", "административ"),
+    "офисное здание": ("офис", "административ"),
+}
+
+
+def _section_rank_quality(section_number: str | None) -> int:
+    """Выше = надёжнее цитата. Табличный мусор «1»/«300» — в хвост выдачи."""
+    section = (section_number or "").strip()
+    if not section:
+        return 0
+    if "/" in section or section.startswith("табл."):
+        return 3
+    if "." in section:
+        return 2
+    if section.isdigit() and int(section) >= 100:
+        return 0
+    if section.isdigit() and len(section) <= 2:
+        return 0
+    return 1
 
 
 def _retrieve_for_region(
@@ -199,8 +240,13 @@ def _retrieve_for_region(
     chunks = list(found.values())
     mentioned = [c for c in chunks if _chunk_mentions_business(c, business_type)]
     rest = [c for c in chunks if c.id not in {m.id for m in mentioned}]
-    mentioned.sort(key=lambda c: c.distance)
-    rest.sort(key=lambda c: c.distance)
+
+    def _sort_key(chunk: RetrievedChunk) -> tuple[int, float]:
+        # качество секции важнее сырого distance: иначе табл.«1» с «автомойки» убивает 5.5.153
+        return (-_section_rank_quality(chunk.section_number), chunk.distance)
+
+    mentioned.sort(key=_sort_key)
+    rest.sort(key=_sort_key)
     ordered = mentioned + rest
     return ordered[:max_chunks]
 
