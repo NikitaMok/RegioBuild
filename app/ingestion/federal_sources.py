@@ -123,6 +123,38 @@ SANPIN_CHUNKS: tuple[CuratedChunk, ...] = (
     ),
 )
 
+# Краснодарский край: строки табл. 108 в raw-корпусе размечены как section_number="1",
+# из-за чего retrieval/grounding теряют норму по автомойкам. Кураторские выдержки
+# с реальными пунктами (5.5.153, 4.3.20) возвращают объект в индекс.
+KRASNODAR_SUPPLEMENT: tuple[CuratedChunk, ...] = (
+    CuratedChunk(
+        region_code="krasnodar_krai",
+        section_number="5.5.153",
+        source_label="РНГП Краснодарского края",
+        category="градостроительные",
+        text=(
+            "Пункт 5.5.153 Нормативов Краснодарского края: требуемое расчётное количество "
+            "машино-мест для парковки (временного хранения) легковых автомобилей для объектов "
+            "общественного и производственного назначения определяется по таблице 108. "
+            "По таблице 108 для станций технического обслуживания и автомоек расчётная "
+            "единица — 1 бокс, количество машино-мест — 1 на расчётную единицу."
+        ),
+    ),
+    CuratedChunk(
+        region_code="krasnodar_krai",
+        section_number="4.3.20",
+        source_label="РНГП Краснодарского края",
+        category="градостроительные",
+        text=(
+            "Пункт 4.3.20 Нормативов Краснодарского края: требуемое расчётное количество "
+            "машино-мест в общественно-деловых зонах для парковки (временного хранения) "
+            "легковых автомобилей устанавливается в соответствии с таблицей 108 и "
+            "требованиями подраздела 5.5. Для автомоек и станций технического обслуживания "
+            "по таблице 108 принимается 1 машино-место на 1 бокс."
+        ),
+    ),
+)
+
 # Дополнение тонкого корпуса Новосибирской области (кураторские выдержки из РНГП)
 NOVOSIBIRSK_SUPPLEMENT: tuple[CuratedChunk, ...] = (
     CuratedChunk(
@@ -165,7 +197,12 @@ NOVOSIBIRSK_SUPPLEMENT: tuple[CuratedChunk, ...] = (
 
 
 def all_curated_chunks() -> list[CuratedChunk]:
-    return list(FZ123_CHUNKS) + list(SANPIN_CHUNKS) + list(NOVOSIBIRSK_SUPPLEMENT)
+    return (
+        list(FZ123_CHUNKS)
+        + list(SANPIN_CHUNKS)
+        + list(KRASNODAR_SUPPLEMENT)
+        + list(NOVOSIBIRSK_SUPPLEMENT)
+    )
 
 
 def write_curated_jsonl(out_dir: Path | None = None) -> Path:

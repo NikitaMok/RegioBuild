@@ -197,13 +197,15 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "Я вас понял!" in text
     assert "«склад»" in text
     assert "в Московской области" in text
-    assert "Правовое регулирование" in text
-    assert "Федеральные нормы (применяются при отсутствии региональных)" in text
+    assert "Правовое регулирование (регион)" in text
+    assert "Федеральный уровень" in text
+    assert "Региональный уровень" in text
     assert "Сроки и документы" in text
     assert "п. 3.2" in text
+    assert "Постановление №713/30" in text or "№713/30" in text
     assert "По остальным категориям данные не найдены" in text
     assert "Что требуется проверить дополнительно" in text
-    assert "юридической консультацией" not in text  # дисклеймер в format_response
+    assert "только учусь" not in text  # дисклеймер в format_response
 
 
 def test_citation_suffix_marks_federal_source_explicitly() -> None:
@@ -234,9 +236,11 @@ def test_render_extraction_marks_federal_fallback_item() -> None:
     )
     text = nodes._render_extraction(extraction)
 
-    assert "СП 42.13330.2016" in text
-    assert "п. 5.1" in text
-    assert "Специальных региональных норм нет" in text
+    assert "СП 42.13330.2016" in text or "п. 5.1" in text
+    assert "Региональный уровень" in text
+    assert "не установлены" in text
+    assert "применяются федеральные" in text
+    assert "Федеральный уровень" in text
 
 
 def test_render_extraction_flags_general_norms_when_no_specific_ones_found() -> None:
@@ -304,6 +308,8 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
                 region_a_value="10 дней",
                 region_b_value="15 дней",
                 summary="Срок выдачи отличается",
+                citation_a="3.2",
+                citation_b="4.1",
             )
         ],
     )
@@ -320,8 +326,14 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
     assert "1. Срок выдачи отличается" in text
     assert "10 дней" in text
     assert "15 дней" in text
-    assert "🔵" in text
-    assert "🟢" in text
+    assert "(МО)" in text
+    assert "(КК)" in text
+    assert "Постановление №713/30" in text
+    assert "Приказ №78" in text
+    assert "п. 3.2" in text
+    assert "п. 4.1" in text
+    assert "🔵" not in text
+    assert "🟢" not in text
     assert "Что требуется проверить дополнительно" in text
 
 
@@ -339,6 +351,9 @@ def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:
     assert "N 78" in text
     assert text.index("N 713/30") < text.index("N 78")
     assert "Различий не обнаружено" in text
+    assert "🏛" in text
+    assert "🗺" in text
+    assert "📜" in text
 
 
 def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
@@ -353,6 +368,8 @@ def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
                 region_a_value="не найдено в предоставленных фрагментах",
                 region_b_value="10 дней",
                 summary="Срок отличается",
+                citation_a="",
+                citation_b="4.1",
             )
         ],
     )
@@ -363,6 +380,7 @@ def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
         "региональные требования отсутствуют" in text
         or "в нормативе региона не указано" in text
     )
+    assert "пункт не указан" in text
 
 
 def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> None:
@@ -378,6 +396,8 @@ def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> 
                 region_b_value="15 дней",
                 summary="Срок выдачи отличается",
                 is_specific=False,
+                citation_a="1.1",
+                citation_b="1.2",
             )
         ],
     )
@@ -401,6 +421,32 @@ def test_citation_matches_chunks_accepts_known_section() -> None:
     assert nodes._citation_matches_chunks("5.5.153", chunks)
     assert nodes._citation_matches_chunks("п. 5.5.153", chunks)
     assert not nodes._citation_matches_chunks("725", chunks)
+
+
+def test_citation_matches_curated_federal_ids() -> None:
+    chunks = [
+        RetrievedChunk(
+            id="f1",
+            text="СЗЗ для автомоек",
+            region_code="federal",
+            section_number="СанПиН/7.1.3",
+            category="санитарные_экологические",
+            distance=0.1,
+        ),
+        RetrievedChunk(
+            id="f2",
+            text="пожарная безопасность",
+            region_code="federal",
+            section_number="123-ФЗ/6",
+            category="пожарная_безопасность",
+            distance=0.2,
+        ),
+    ]
+    assert nodes._citation_matches_chunks("СанПиН/7.1.3", chunks)
+    assert nodes._citation_matches_chunks("7.1.3", chunks)
+    assert nodes._citation_matches_chunks("123-ФЗ/6", chunks)
+    # голый «6» без префикса — слишком коротко, не матчим
+    assert not nodes._citation_matches_chunks("6", chunks)
 
 
 def test_filter_grounded_items_drops_hallucinated_citations() -> None:
@@ -455,7 +501,9 @@ def test_format_response_appends_disclaimer_on_success() -> None:
         "extraction": ExtractionResult(region_code="moscow_oblast", business_type="склад", items=[]),
     }
     result = nodes.format_response(state)
+    assert "только учусь" in result["response_text"]
     assert "не является юридической консультацией" in result["response_text"]
+    assert "муниципальном" in result["response_text"]
 
 
 def test_format_response_shows_normalized_business_type_prefix() -> None:

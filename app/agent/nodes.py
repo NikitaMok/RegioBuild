@@ -17,7 +17,11 @@ from app.core.business_type import (
     resolve_business_type,
 )
 from app.core.config import get_settings
-from app.core.npa_titles import federal_sp42_label
+from app.core.npa_titles import (
+    federal_sp42_label,
+    short_federal_cite_from_citation,
+    short_npa_cite,
+)
 from app.core.regions import FEDERAL_CODE, get_region
 from app.llm.base import DEFAULT_MAX_TOKENS, LLMProviderError
 from app.llm.factory import get_llm_provider
@@ -37,10 +41,20 @@ from app.vectorstore.retriever import retrieve
 TOP_K_PER_CATEGORY = 5
 
 DISCLAIMER_TEXT = (
-    "\n\n⚠️ Ответ носит справочный характер и не является юридической консультацией. "
-    "Сверьте указанные пункты в тексте нормативного акта (название источника выше), "
-    "прежде чем опираться на него."
+    "\n\n⚠️ Я справочный помощник и только учусь: ответ не является юридической "
+    "консультацией и не заменяет работу юриста. Требования на муниципальном уровне "
+    "(ПЗЗ и иные акты) могут отличаться. Сверьте указанные пункты в первоисточнике, "
+    "прежде чем опираться на ответ."
 )
+
+# короткие маркеры регионов в сравнении (вместо цветных кружков)
+_REGION_ABBREV: dict[str, str] = {
+    "moscow_oblast": "МО",
+    "krasnodar_krai": "КК",
+    "sverdlovsk_oblast": "СО",
+    "novosibirsk_oblast": "НО",
+    "tatarstan": "РТ",
+}
 
 MAX_WORDS_FOR_RAW_BUSINESS_TYPE = 3
 
@@ -151,6 +165,16 @@ def understand_query(state: AgentState) -> AgentState:
     return {**state, "business_type": business_type}
 
 
+def _chunk_mentions_business(chunk: RetrievedChunk, business_type: str) -> bool:
+    needle = (business_type or "").strip().lower()
+    if not needle:
+        return False
+    text = (chunk.text or "").lower()
+    # «автомойка» ↔ «автомойки»; короткие типы — без обрезания
+    stem = needle[:-1] if len(needle) > 5 and needle.endswith(("а", "я", "ы", "и")) else needle
+    return needle in text or (len(stem) >= 4 and stem in text)
+
+
 def _retrieve_for_region(business_type: str, region_code: str) -> list[RetrievedChunk]:
     # по категориям отдельно — иначе top_k забивают чанки про «документы»
     found_ids: set[str] = set()
@@ -163,7 +187,16 @@ def _retrieve_for_region(business_type: str, region_code: str) -> list[Retrieved
                 found_ids.add(chunk.id)
                 result.append(chunk)
 
-    return result
+    # прямой запрос по типу бизнеса: табличные строки (автомойка в табл. 108) иначе тонут
+    for chunk in retrieve(business_type, region_code=region_code, top_k=TOP_K_PER_CATEGORY):
+        if chunk.id not in found_ids:
+            found_ids.add(chunk.id)
+            result.append(chunk)
+
+    # чанки с буквальным упоминанием объекта — в начало промпта
+    mentioned = [c for c in result if _chunk_mentions_business(c, business_type)]
+    rest = [c for c in result if c.id not in {m.id for m in mentioned}]
+    return mentioned + rest
 
 
 def retrieve_chunks(state: AgentState) -> AgentState:
@@ -288,6 +321,8 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         + list(state.get("retrieved_federal", []))
     )
     grounded_commons = _filter_grounded_commons(comparison.common_requirements, allowed_chunks)
+    chunks_a = list(state.get("retrieved_a", [])) + list(state.get("retrieved_federal", []))
+    chunks_b = list(state.get("retrieved_b", [])) + list(state.get("retrieved_federal", []))
     cleaned_differences = [
         diff.model_copy(
             update={
@@ -298,6 +333,8 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
                 "region_b_value": _replace_region_placeholders(
                     diff.region_b_value, region_a.display_name, region_b.display_name
                 ),
+                "citation_a": _ground_optional_citation(diff.citation_a, chunks_a),
+                "citation_b": _ground_optional_citation(diff.citation_b, chunks_b),
             }
         )
         for diff in comparison.differences
@@ -386,6 +423,7 @@ def _citation_matches_chunks(citation: str, chunks: list[RetrievedChunk]) -> boo
     normalized = _normalize_citation(citation)
     if not normalized or normalized.lower() in {"без номера", "n/a", "-", "—"}:
         return False
+    normalized_compact = normalized.replace(" ", "")
     for chunk in chunks:
         section = (chunk.section_number or "").strip()
         if not section:
@@ -396,6 +434,19 @@ def _citation_matches_chunks(citation: str, chunks: list[RetrievedChunk]) -> boo
             or normalized.startswith(section + ".")
         ):
             return True
+        # curated ID: «123-ФЗ/6», «СанПиН/7.1.3» — модель может вернуть суффикс или полный id
+        if "/" in section:
+            prefix, suffix = section.rsplit("/", 1)
+            section_compact = section.replace(" ", "")
+            if normalized == section or normalized_compact == section_compact:
+                return True
+            # «7.1.3» для СанПиН/7.1.3 — ок; голый «6» для 123-ФЗ/6 — нет
+            if normalized == suffix and (len(suffix) > 1 or "." in suffix):
+                return True
+            if normalized_compact.endswith("/" + suffix):
+                return True
+            if prefix.lower() in normalized.lower() and suffix in normalized:
+                return True
     return False
 
 
@@ -462,6 +513,102 @@ def _citation_suffix(citation: str, source_level: str) -> str:
     return f"(п. {_esc(normalized)})"
 
 
+def _ground_optional_citation(citation: str, chunks: list[RetrievedChunk]) -> str:
+    """Пустой/«пункт не указан» оставляем; выдуманный номер обнуляем."""
+    raw = (citation or "").strip()
+    if not raw or raw.lower() in {"пункт не указан", "без номера", "n/a", "-", "—"}:
+        return ""
+    if _citation_matches_chunks(raw, chunks):
+        return raw
+    logger.warning(f"отброшена citation без опоры на чанки: {raw!r}")
+    return ""
+
+
+def _punkt_label(citation: str) -> str:
+    normalized = _normalize_citation(citation)
+    if not normalized or normalized.lower() in {"пункт не указан", "без номера", "n/a", "-", "—"}:
+        return "пункт не указан"
+    return f"п. {normalized}"
+
+
+def _short_npa_for_item(citation: str, source_level: str, region_code: str) -> str:
+    if source_level == "федеральный":
+        return short_federal_cite_from_citation(citation)
+    return short_npa_cite(get_region(region_code).document_title)
+
+
+def _format_item_source(citation: str, source_level: str, region_code: str) -> str:
+    npa = _short_npa_for_item(citation, source_level, region_code)
+    return f"({_esc(npa)}, {_esc(_punkt_label(citation))})"
+
+
+def _region_marker(region_code: str) -> str:
+    return _REGION_ABBREV.get(region_code, region_code[:2].upper())
+
+
+def _format_compare_side(
+    region_code: str,
+    value: str,
+    citation: str,
+    source_level: str,
+) -> str:
+    region = get_region(region_code)
+    marker = _region_marker(region_code)
+    if source_level == "федеральный":
+        npa = short_federal_cite_from_citation(citation)
+    else:
+        npa = short_npa_cite(region.document_title)
+    return (
+        f"  ({_esc(marker)}) <b>{_esc(region.display_name)}</b> "
+        f"({_esc(npa)}, {_esc(_punkt_label(citation))}): "
+        f"{_esc(_humanize_missing_value(value))}"
+    )
+
+
+def _render_item_bullets(items: list[RequirementItem], region_code: str) -> list[str]:
+    lines: list[str] = []
+    specific_items = [item for item in items if item.is_specific]
+    general_items = [item for item in items if not item.is_specific]
+    if specific_items and general_items:
+        for item in specific_items:
+            source = _format_item_source(item.citation, item.source_level, region_code)
+            lines.append(f"• {_esc(item.description)} {source}")
+        lines.append("Плюс действуют общие нормы:")
+        for item in general_items:
+            source = _format_item_source(item.citation, item.source_level, region_code)
+            lines.append(f"• {_esc(item.description)} {source}")
+        return lines
+
+    ordered = specific_items + general_items if specific_items else general_items
+    for item in ordered:
+        source = _format_item_source(item.citation, item.source_level, region_code)
+        lines.append(f"• {_esc(item.description)} {source}")
+    return lines
+
+
+def _render_level_by_category(
+    items: list[RequirementItem],
+    region_code: str,
+    business_type: str,
+) -> list[str]:
+    lines: list[str] = []
+    groups = _group_by_category(items)
+    for category in get_settings().requirement_categories:
+        category_items = groups.get(category) or []
+        if not category_items:
+            continue
+        lines.append(f"\n<b>{_category_label(category)}</b>")
+        specific = [item for item in category_items if item.is_specific]
+        general = [item for item in category_items if not item.is_specific]
+        if not specific and general:
+            lines.append(
+                f"Специальных требований к «{_esc(business_type)}» здесь нет, "
+                f"но применяются общие нормы:"
+            )
+        lines.extend(_render_item_bullets(category_items, region_code))
+    return lines
+
+
 def _humanize_missing_value(value: str) -> str:
     cleaned = (value or "").strip()
     if not cleaned:
@@ -488,63 +635,60 @@ def _is_concrete_common(item: CommonRequirementItem) -> bool:
 def _render_extraction(extraction: ExtractionResult) -> str:
     region = get_region(extraction.region_code)
     sp_label = federal_sp42_label()
+    regional_items = [item for item in extraction.items if item.source_level != "федеральный"]
+    federal_items = [item for item in extraction.items if item.source_level == "федеральный"]
+    has_regional = bool(regional_items)
+    has_federal = bool(federal_items)
+
     lines = [
         f"<b>{_greeting_for_info(extraction.business_type, region.name_locative)}</b>",
-        f"📖 Правовое регулирование: {region.document_title} (проверено {region.last_verified})",
-        f"📖 Федеральные нормы (применяются при отсутствии региональных): {sp_label}.",
+        f"🏛 Правовое регулирование (регион): {region.document_title} "
+        f"(проверено {region.last_verified})",
+        f"📜 Федеральный уровень: {sp_label}; при наличии в источниках — также 123-ФЗ и СанПиН.",
     ]
 
-    groups = _group_by_category(extraction.items)
-    categories = list(get_settings().requirement_categories)
-    empty_categories = [c for c in categories if not groups.get(c)]
-    filled_categories = [c for c in categories if groups.get(c)]
-
-    if empty_categories and filled_categories:
-        empty_labels = ", ".join(_category_label(c) for c in empty_categories)
+    lines.append("\n<b>Региональный уровень</b>")
+    if has_regional:
+        lines.extend(
+            _render_level_by_category(regional_items, extraction.region_code, extraction.business_type)
+        )
+    else:
         lines.append(
-            f"\nПо остальным категориям данные не найдены "
-            f"({_esc(empty_labels)})."
+            "Специальные требования в региональном нормативе не установлены."
         )
 
-    shown_any = False
-    for category in filled_categories:
-        items = groups.get(category) or []
-        shown_any = True
-        lines.append(f"\n<b>{_category_label(category)}</b>")
-
-        specific_items = [item for item in items if item.is_specific]
-        general_items = [item for item in items if not item.is_specific]
-        only_federal = all(item.source_level == "федеральный" for item in items)
-
-        if only_federal:
-            lines.append(
-                f"Специальных региональных норм нет — ниже применимые федеральные ({sp_label}):"
-            )
-        elif not specific_items and general_items:
-            lines.append(
-                f"Специальных требований к «{_esc(extraction.business_type)}» здесь нет, "
-                f"но применяются общие нормы:"
-            )
-
-        ordered = specific_items + general_items if specific_items else general_items
-        if specific_items and general_items:
-            for item in specific_items:
-                suffix = _citation_suffix(item.citation, item.source_level)
-                lines.append(f"• {_esc(item.description)}" + (f" {suffix}" if suffix else ""))
-            lines.append("Плюс действуют общие нормы:")
-            for item in general_items:
-                suffix = _citation_suffix(item.citation, item.source_level)
-                lines.append(f"• {_esc(item.description)}" + (f" {suffix}" if suffix else ""))
+    lines.append("\n<b>Федеральный уровень</b>")
+    if has_federal:
+        if has_regional:
+            lines.append("Дополнительно применяются федеральные нормы:")
         else:
-            for item in ordered:
-                suffix = _citation_suffix(item.citation, item.source_level)
-                lines.append(f"• {_esc(item.description)}" + (f" {suffix}" if suffix else ""))
-
-    if not shown_any:
-        lines.append(
-            "\nВ региональном нормативе требования по данному объекту не установлены. "
-            f"Рекомендуем проверить федеральные нормы ({sp_label}) и актуальные ПЗЗ территории."
+            lines.append(
+                "На региональном уровне требования не установлены — "
+                "применяются федеральные нормы:"
+            )
+        lines.extend(
+            _render_level_by_category(federal_items, FEDERAL_CODE, extraction.business_type)
         )
+    else:
+        lines.append(
+            "В объёме доступных федеральных источников (СП 42, 123-ФЗ, СанПиН) "
+            "специальных требований к объекту не найдено."
+        )
+
+    if not has_regional and not has_federal:
+        lines.append(
+            "\nИтого: требования не найдены ни на региональном, ни на федеральном уровне "
+            "в доступных источниках. Рекомендуем проверить муниципальные ПЗЗ и отраслевые НПА; "
+            "ответ помощника нужно перепроверить самостоятельно."
+        )
+    else:
+        filled = {item.category for item in extraction.items}
+        empty_categories = [c for c in get_settings().requirement_categories if c not in filled]
+        if empty_categories and filled:
+            empty_labels = ", ".join(_category_label(c) for c in empty_categories)
+            lines.append(
+                f"\nПо остальным категориям данные не найдены ({_esc(empty_labels)})."
+            )
 
     lines.append(format_additional_checks_block(extraction.business_type))
     return "\n".join(lines)
@@ -556,11 +700,11 @@ def _render_comparison(comparison: ComparisonResult) -> str:
     sp_label = federal_sp42_label()
     lines = [
         f"<b>{_greeting_for_comparison(comparison.business_type, region_a.name_locative, region_b.name_locative)}</b>",
-        f"📖 {region_a.display_name} — правовое регулирование: {region_a.document_title} "
+        f"🏛 {region_a.display_name} — правовое регулирование: {region_a.document_title} "
         f"(проверено {region_a.last_verified})",
-        f"📖 {region_b.display_name} — правовое регулирование: {region_b.document_title} "
+        f"🗺 {region_b.display_name} — правовое регулирование: {region_b.document_title} "
         f"(проверено {region_b.last_verified})",
-        f"📖 Федеральные нормы (применяются при отсутствии региональных): {sp_label}.",
+        f"📜 Федеральные нормы (применяются при отсутствии региональных): {sp_label}.",
         f"\n{_esc(comparison.overall_summary)}",
     ]
 
@@ -588,12 +732,20 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                 federal_note = f" (по {sp_label})" if diff.source_level == "федеральный" else ""
                 lines.append(f"{diff_number}. {_esc(diff.summary)}{federal_note}")
                 lines.append(
-                    f"  🔵 <b>{region_a.display_name}:</b> "
-                    f"{_esc(_humanize_missing_value(diff.region_a_value))}"
+                    _format_compare_side(
+                        comparison.region_a,
+                        diff.region_a_value,
+                        diff.citation_a,
+                        diff.source_level,
+                    )
                 )
                 lines.append(
-                    f"  🟢 <b>{region_b.display_name}:</b> "
-                    f"{_esc(_humanize_missing_value(diff.region_b_value))}"
+                    _format_compare_side(
+                        comparison.region_b,
+                        diff.region_b_value,
+                        diff.citation_b,
+                        diff.source_level,
+                    )
                 )
                 diff_number += 1
     else:
@@ -606,12 +758,10 @@ def _render_comparison(comparison: ComparisonResult) -> str:
             "при расширении бизнеса на них можно ориентироваться как на общие:"
         )
         for index, item in enumerate(commons, start=1):
-            suffix = _citation_suffix(item.citation, item.source_level)
+            source_code = FEDERAL_CODE if item.source_level == "федеральный" else comparison.region_a
+            source = _format_item_source(item.citation, item.source_level, source_code)
             federal_note = f" (по {sp_label})" if item.source_level == "федеральный" else ""
-            line = f"{index}. {_esc(item.description)}{federal_note}"
-            if suffix:
-                line = f"{line} {suffix}"
-            lines.append(line)
+            lines.append(f"{index}. {_esc(item.description)}{federal_note} {source}")
     elif not differences:
         lines.append(
             "\nТребования не установлены ни на региональном, ни на федеральном уровне "

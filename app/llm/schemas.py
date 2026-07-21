@@ -95,6 +95,20 @@ class DifferenceItem(BaseModel):
         description="конкретная формулировка или цифра из норматива региона B, не общая фраза"
     )
     summary: str = Field(description="в чём разница между region_a_value и region_b_value, простыми словами")
+    citation_a: str = Field(
+        default="",
+        description=(
+            "номер пункта НПА для значения региона A из метки [пункт …]; "
+            "пустая строка или «пункт не указан», если в фрагментах номера нет"
+        ),
+    )
+    citation_b: str = Field(
+        default="",
+        description=(
+            "номер пункта НПА для значения региона B из метки [пункт …]; "
+            "пустая строка или «пункт не указан», если в фрагментах номера нет"
+        ),
+    )
     is_specific: bool = Field(
         default=True,
         description=(

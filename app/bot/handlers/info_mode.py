@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import html
-
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -13,7 +11,6 @@ from app.bot.keyboards import cancel_keyboard, main_menu_keyboard, region_keyboa
 from app.bot.messaging import answer_html_chunks
 from app.bot.states import InfoFlow
 from app.core.business_type import looks_like_business_query
-from app.core.regions import get_region
 
 router = Router(name="info_mode")
 
@@ -50,12 +47,10 @@ async def receive_region(callback: CallbackQuery, state: FSMContext) -> None:
     region_code = callback.data.split(":", 1)[1]
     data = await state.get_data()
     business_type = data["business_type"]
-    region_name = get_region(region_code).display_name
     telegram_user_id = str(callback.from_user.id) if callback.from_user else None
 
     await callback.message.edit_text(
-        f"Ищу требования для «{html.escape(business_type)}» в регионе {region_name}.\n"
-        f"Обычно несколько секунд; после перезапуска сервиса первый ответ может занять до минуты."
+        "Проверяю нормативные акты по вашему запросу. Пожалуйста, подождите."
     )
     await callback.answer()
 

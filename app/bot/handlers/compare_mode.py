@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import html
-
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -13,7 +11,6 @@ from app.bot.keyboards import cancel_keyboard, main_menu_keyboard, region_keyboa
 from app.bot.messaging import answer_html_chunks
 from app.bot.states import CompareFlow
 from app.core.business_type import looks_like_business_query
-from app.core.regions import get_region
 
 router = Router(name="compare_mode")
 
@@ -63,14 +60,10 @@ async def receive_region_b(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     business_type = data["business_type"]
     region_a = data["region_a"]
-    region_a_name = get_region(region_a).display_name
-    region_b_name = get_region(region_b).display_name
     telegram_user_id = str(callback.from_user.id) if callback.from_user else None
 
     await callback.message.edit_text(
-        f"Сравниваю требования для «{html.escape(business_type)}»: "
-        f"{region_a_name} и {region_b_name}.\n"
-        f"Обычно несколько секунд; после перезапуска сервиса первый ответ может занять до минуты."
+        "Сверяю требования по двум регионам. Пожалуйста, подождите."
     )
     await callback.answer()
 
