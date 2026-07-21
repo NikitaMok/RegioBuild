@@ -10,7 +10,7 @@ from app.llm.schemas import (
     ExtractionResult,
     RequirementItem,
 )
-from app.vectorstore.retriever import RetrievedChunk
+from app.vectorstore.types import RetrievedChunk
 
 
 def test_understand_query_requires_business_type() -> None:

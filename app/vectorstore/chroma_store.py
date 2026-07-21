@@ -3,14 +3,15 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
-
 from app.core.config import get_settings
 
 
 class ChromaStore:
     def __init__(self, persist_dir: str | None = None, collection_name: str | None = None) -> None:
+        # chromadb тяжёлый — импорт только при реальном обращении к индексу
+        import chromadb
+        from chromadb.config import Settings as ChromaSettings
+
         settings = get_settings()
         self.persist_dir = persist_dir or settings.chroma_persist_dir
         self.collection_name = collection_name or settings.chroma_collection

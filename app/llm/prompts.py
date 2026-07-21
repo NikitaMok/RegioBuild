@@ -4,7 +4,7 @@ from app.core.business_type import UNKNOWN_BUSINESS_TYPE
 from app.core.config import get_settings
 from app.core.npa_titles import federal_sp42_label
 from app.core.regions import get_region
-from app.vectorstore.retriever import RetrievedChunk
+from app.vectorstore.types import RetrievedChunk
 
 _CATEGORY_LIST = ", ".join(f'"{c}"' for c in get_settings().requirement_categories)
 

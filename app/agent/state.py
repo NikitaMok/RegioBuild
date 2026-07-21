@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal, Optional, TypedDict
 
 from app.llm.schemas import ComparisonResult, ExtractionResult
-from app.vectorstore.retriever import RetrievedChunk
+from app.vectorstore.types import RetrievedChunk
 
 
 class AgentState(TypedDict, total=False):

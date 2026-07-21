@@ -31,7 +31,8 @@ from app.llm.prompts import (
     build_extraction_prompt,
 )
 from app.llm.schemas import CommonRequirementItem, ComparisonResult, ExtractionResult, RequirementItem
-from app.vectorstore.retriever import RetrievedChunk, retrieve
+from app.vectorstore.types import RetrievedChunk
+from app.vectorstore.retriever import retrieve
 
 TOP_K_PER_CATEGORY = 5
 

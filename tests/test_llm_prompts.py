@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.llm.prompts import build_comparison_prompt, build_extraction_prompt
-from app.vectorstore.retriever import RetrievedChunk
+from app.vectorstore.types import RetrievedChunk
 
 
 def _chunk(text: str, section_number: str = "1.1") -> RetrievedChunk:

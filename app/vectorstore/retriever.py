@@ -1,22 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from app.vectorstore.types import RetrievedChunk
 
-from app.embeddings.embedder import get_embedder
-from app.vectorstore.chroma_store import get_chroma_store
-
-
-@dataclass
-class RetrievedChunk:
-    id: str
-    text: str
-    region_code: str
-    section_number: str | None
-    category: str | None
-    distance: float
+__all__ = ["RetrievedChunk", "retrieve"]
 
 
 def retrieve(query: str, region_code: str | None = None, top_k: int = 5) -> list[RetrievedChunk]:
+    from app.embeddings.embedder import get_embedder
+    from app.vectorstore.chroma_store import get_chroma_store
+
     embedder = get_embedder()
     store = get_chroma_store()
 
