@@ -2,13 +2,15 @@
 
 [Русская версия (основная)](README.md)
 
-**A project for comparing regional construction planning standards (RNGP/TSN)
-of constituent entities of the Russian Federation**, with a federal baseline
-(SP 42.13330.2016 and curated excerpts from 123-FZ / SanPiN).
+**A project for comparing regional urban-planning design standards (RNGP/TSN)
+of constituent entities of the Russian Federation**, taking into account
+federal regulation (SP 42.13330.2016, excerpts from Federal Law No. 123-FZ of
+22 July 2008, and sanitary rules and norms).
 
-Telegram is a demonstration client. The core is a **RAG + LLM agent** with
-mandatory grounding of material statements to a normative clause. The same API
-can be deployed standalone and called from another application.
+The Telegram client is a demonstration interface. The architectural core is a
+FastAPI service and a RAG agent (LangGraph): material statements in the answer
+are expected to be grounded in a specific normative clause. The API may be
+deployed independently of the messenger.
 
 <p align="center">
   <img src="docs/screenshots/01-bot-about.png" alt="RegioBuild — Telegram overview" width="400"/>
@@ -16,54 +18,36 @@ can be deployed standalone and called from another application.
 
 ---
 
-## Status and context
+## Purpose
 
-To be clear: **the current build is not a finished commercial product.** There
-is a working Telegram bot and API, programmatic citation checks against
-retrieved fragments, and an index for five regions — but a durable service
-still requires corpus expansion, municipal zoning (PZZ), better handling of
-unusual phrasings, and ongoing data maintenance. Everything here was built
-**alone**.
+Legal regulation of capital-construction siting across Russian regions is
+highly fragmented: the content and density of regional urban-planning design
+standards differ substantially. Manual comparison of regional acts and federal
+norms is labour-intensive and carries a real risk of omitting material
+requirements.
 
-This is not “I spotted a market gap and left a startup half-done.” I hold a
-bachelor’s and a master’s degree in law (Ural State Law University / УрГЮУ),
-with subsequent legal practice and sales experience; fragmented regional
-regulation is familiar from that background. After moving into ML I wanted to
-test whether a retrieval pipeline with verifiable statute citations could be
-assembled for this problem. The original goal was research and engineering,
-not a product launch; serious follow-up work would need a team.
-
-**On the git timeline.** For a long time the pipeline, vector index, and agent
-were developed and tested **locally** (API, pytest, eval — no Telegram). I
-registered the bot with BotFather only recently (creation date is visible
-there), so the public git history mostly reflects deployment and the client
-layer. This was not a three-day build: the core and NPA corpus came earlier,
-without a remote repository and without a messenger client.
+RegioBuild produces a **reference overview** stating the clause number and the
+level of regulation (regional / federal). The output does not replace legal
+advice, design documentation, or a professional assessment of whether siting
+is permissible.
 
 ---
 
-## The problem
+## Current status
 
-Each Russian region has its own act on urban-planning design standards.
-Regulatory density varies: one region may set hard parking rules for a car
-wash; another is silent and leaves the federal framework. Lawyers and
-designers know the cost — hours of manual comparison and a real risk of
-missing a material siting condition.
+The repository includes a demonstration Telegram client, an HTTP API, a vector
+index covering five constituent entities of the Russian Federation, and
+programmatic verification of citations against retrieved corpus fragments. The
+present build is a **working prototype**: broader subject coverage, municipal
+zoning (PZZ), robustness on atypical query wording, and ongoing corpus
+maintenance require further development — including by a team rather than a
+single author.
 
-RegioBuild is not a chat to “talk about construction.” It aims at a
-**verifiable brief**: clause number and regulatory level (regional / federal).
-
-### Subject-matter scope (wave 1)
-
-Regions in the index: Moscow Oblast, Krasnodar Krai, Sverdlovsk Oblast,
-Novosibirsk Oblast, Republic of Tatarstan. Federal layer: SP 42 and curated
-123-FZ / SanPiN excerpts.
-
-Object types: car wash, auto service, fuel station, warehouse, mall/store,
-office, food service, hotel, medical center, production.
-
-Not the full Ministry of Construction classifier and not every SP in Russia —
-a deliberately narrow slice for typical commercial siting questions.
+Development and testing of the core (ingestion, index, agent, API, evaluation
+runs) were carried out locally for an extended period. Publication of the
+repository and connection of the Telegram client came later; the short public
+git history primarily reflects deployment and the client layer, not the full
+construction of the solution.
 
 <p align="center">
   <img src="docs/screenshots/02-bot-start.png" alt="Start: legal status" width="360"/>
@@ -71,22 +55,25 @@ a deliberately narrow slice for typical commercial siting questions.
   <img src="docs/screenshots/03-bot-rules.png" alt="Rules and disclaimer" width="360"/>
 </p>
 
-**Legal status.** A reference navigator over NPA fragments; **not** legal
-advice and **not** an opinion on whether a specific plot may host an object.
-Municipal PZZ and other local acts may be absent from the index and must be
-checked separately. Details: [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md)
-(Russian).
+**Legal status.** A reference navigator over fragments of normative legal acts;
+it is **not** legal advice and **not** an opinion on whether an object may be
+sited on a particular land plot. Municipal land-use and development rules and
+other local acts may be absent from the index and must be verified separately.
+Details: [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md) (Russian).
 
 ---
 
 ## Capabilities
 
-1. **Requirements in one region** — overview by capital-construction object
-   type, with regional and federal levels separated.
-2. **Compare two regions** — differences and overlaps with clause citations.
+1. Overview of requirements for a capital-construction object in one
+   constituent entity of the Russian Federation — with regional and federal
+   levels separated.
+2. Comparison of requirements between two entities — differences and overlaps
+   with clause citations.
 
-Clause numbers from the model are checked against retrieved index fragments;
-if there is no support, refusal is preferred over an invented norm.
+A clause number proposed by the language model is matched against fragments
+retrieved from the index; where there is no verifiable support, the system
+refrains from inventing a norm.
 
 <p align="center">
   <img src="docs/screenshots/04-bot-modes.png" alt="Mode selection" width="360"/>
@@ -104,24 +91,37 @@ Example answers:
 
 ---
 
-## Architecture and stack
+## Index coverage
 
-| Layer | |
-|-------|--|
+Constituent entities currently represented in the index: Moscow Oblast,
+Krasnodar Krai, Sverdlovsk Oblast, Novosibirsk Oblast, Republic of Tatarstan.
+
+Federal layer: SP 42.13330.2016; curated fragments of Federal Law No. 123-FZ
+and SanPiN for background comparison.
+
+The index does not claim exhaustive coverage of the object classifier or the
+full set of Russian codes of practice.
+
+---
+
+## Stack
+
+| Layer | Components |
+|-------|------------|
 | Language | Python 3.11 |
 | Backend | FastAPI (`/info`, `/compare`, `/health`, `/metrics`) |
 | Client | aiogram 3 |
 | Orchestration | LangGraph |
 | Retrieval | sentence-transformers (multilingual MiniLM), Chroma |
-| Category classifier | scikit-learn (TF-IDF + LogisticRegression) |
-| LLM | GigaChat in production; YandexGPT also in code |
-| Data | SQLAlchemy + Alembic, disk LLM cache |
-| Quality | pytest, Recall@k / MRR |
-| Infra | Docker, GitHub Actions, Prometheus, Sentry |
+| Classification | scikit-learn (TF-IDF + LogisticRegression) |
+| LLM | GigaChat (production); YandexGPT also in code |
+| Data | SQLAlchemy, Alembic, disk LLM response cache |
+| Quality | pytest; Recall@k, MRR |
+| Infrastructure | Docker, GitHub Actions, Prometheus, Sentry |
 
-One Docker image; role via `SERVICE_ROLE=api|bot`.
+Single Docker image; process role via `SERVICE_ROLE=api|bot`.
 
-Pipeline sketch: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Russian).
+Pipeline description: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Russian).
 
 ---
 
@@ -130,15 +130,15 @@ Pipeline sketch: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Russian).
 ```
 RegioBuild/
   app/
-    agent/         # LangGraph: normalize → retrieve → ground → format
+    agent/         # LangGraph
     api/           # FastAPI
     bot/           # Telegram client
     classifier/
-    core/          # regions, legal, business_type
+    core/
     db/
     embeddings/
     eval/
-    ingestion/     # parsing, curated
+    ingestion/
     llm/
     vectorstore/
   config/          # regions.yaml
@@ -147,23 +147,11 @@ RegioBuild/
   scripts/
   tests/
   data/
-    curated/       # in git
-    chroma/        # vector index in git (image build without re-embed on a weak VPS)
+    curated/
+    chroma/
     raw/ processed/  # local, not in git
   Dockerfile
 ```
-
----
-
-## Engineering friction
-
-- **NPA ingestion** — heterogeneous formats, table noise, false clause
-  numbering, uneven corpus density across regions.
-- **Retrieval and grounding** — user language ≠ statutory legalese; without
-  usable-chunk filters and citation checks the model invents article numbers.
-- **Ops on limited RAM** — embedder cold start, split api/bot roles. Pilot:
-  Bothost + GigaChat. [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md)
-  (Russian).
 
 ---
 
@@ -176,24 +164,26 @@ pip install -r requirements.txt
 copy .env.example .env         # Linux/Mac: cp .env.example .env
 ```
 
-Put LLM keys and the bot token in `.env`:
+LLM credentials and the bot token go in `.env`:
 
 ```bash
 alembic upgrade head
-python -m app.ingestion.pipeline        # rebuild corpus if needed
+python -m app.ingestion.pipeline
 python -m app.embeddings.build_index
 python -m app.classifier.train
 python -m scripts.ingest_curated
 
 uvicorn app.api.main:app --reload
-python -m app.bot.main                  # second terminal
+python -m app.bot.main
 ```
 
-Or: `docker compose up --build`. Postgres: `docker-compose.postgres.yml`.
+Alternatively: `docker compose up --build`. Postgres variant:
+`docker-compose.postgres.yml`. Deployment notes:
+[`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md) (Russian).
 
 ---
 
-## Tests and quality
+## Testing
 
 ```bash
 pytest
@@ -202,17 +192,14 @@ python -m app.eval.answer_eval
 python -m scripts.audit_corpus
 ```
 
-CI (GitHub Actions) runs a light suite without torch/chroma.
-Post-deploy smoke: `scripts/smoke_wave1_prod.py`.
+Continuous integration (GitHub Actions) runs a reduced suite without
+torch/chroma. Post-deployment smoke: `scripts/smoke_wave1_prod.py`.
 
 ---
 
 ## Author
 
-**Nikita Mokin**
-
-Bachelor’s and master’s degrees in law (Ural State Law University / УрГЮУ).
-Legal practice, then ML with a LegalTech focus.
+Nikita Mokin
 
 [GitHub](https://github.com/NikitaMok) · [LinkedIn](https://ru.linkedin.com/in/mokinnikita)
 
@@ -224,6 +211,6 @@ Legal practice, then ML with a LegalTech focus.
 
 Copying the repository, reproducing substantial parts of the solution, and
 using the code or product for commercial purposes **without the prior written
-consent of the rights holder is prohibited**. Sources on GitHub are intended
-for review and demonstration of competence, not as an open-source licence for
-commercial exploitation.
+consent of the rights holder is prohibited**. Sources published on GitHub are
+intended for review and demonstration of competence and do not constitute an
+open-source licence for commercial exploitation.
