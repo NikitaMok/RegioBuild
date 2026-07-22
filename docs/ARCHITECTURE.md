@@ -90,6 +90,6 @@ flowchart TD
 - Sentry по `SENTRY_DSN`
 - LLM cache: memory + disk
 - Дневной лимит запросов на `telegram_user_id`
-
-Подключение Grafana Cloud: [`GRAFANA.md`](GRAFANA.md) — нужны scrape или
-remote write; одних переменных в env недостаточно.
+- Grafana Cloud: креды remote write / scrape в env; пайплайн —
+  [`GRAFANA.md`](GRAFANA.md). Одни переменные без scrape/Alloy в Cloud не
+  заполняют Active Series — нужен явный pipe с Bothost `/metrics`.

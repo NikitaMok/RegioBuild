@@ -2,28 +2,34 @@
 
 [Русская версия (основная)](README.md)
 
-Regional urban-planning design standards in Russia are a domain of their own.
-Each constituent entity has its own rules, document structure, and density of
+Differences in regional urban-planning design standards across the Russian
+Federation are a well-known problem that is almost impossible to close by hand.
+Each constituent entity has its own requirements, act structure, and density of
 regulation. Federal norms set a baseline, but regional specifics can change
-everything — from building parameters to sanitary setbacks.
+everything.
 
-Comparing this by hand takes hours. And even when it feels complete, something
-material is often missing. I know that from legal practice.
+I know this from legal practice. Manual comparison takes hours even for an
+experienced lawyer — and when it feels complete, something material is often
+still missing.
 
-In the United States, siting rules differ sharply across states; a similar
-pattern exists across Russian regions. The pain is not limited to developers —
-anyone placing a capital-construction object in a new region faces it.
-
-**RegioBuild** is an engineering response: an API-first navigator over RNGP/TSN
-corpora against the federal layer, with statements tied to clause numbers and a
-clear split between regional and federal regulation.
-
-Telegram is a demonstration channel. The core is an HTTP API that external
-clients can call directly.
+**RegioBuild** is an engineering answer to that problem.
 
 <p align="center">
   <img src="docs/screenshots/01-bot-about.png" alt="RegioBuild — Telegram overview" width="400"/>
 </p>
+
+---
+
+## What it is
+
+A service for analysing regional urban-planning design standards (RNGP/TSN)
+against the federal layer. Given an object type and a region — or two regions
+for comparison — it returns a structured overview tied to normative clauses,
+with regional and federal levels kept distinct.
+
+Telegram is a demonstration channel at this stage. The core is an **HTTP API**
+(`/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`) that external systems
+can call independently of the messenger.
 
 ---
 
@@ -33,8 +39,8 @@ clients can call directly.
 
 Regional acts arrive as PDF, HTML, DOCX, and noisy tables with false numbering.
 A hierarchical parser extracts structured requirements; heuristics strip noise
-before indexing. Miss that step, and “clause 1” from a table caption lands in
-the vector store — and retrieval feeds the model garbage.
+before indexing. Skip that, and “clause 1” from a table caption lands in the
+vector store — and retrieval feeds the model garbage.
 
 Corpus manifest and ISO region codes live in `config/documents.yaml` and
 `config/regions.yaml`. Municipal zoning (PZZ) is out of the current index.
@@ -47,9 +53,9 @@ enough.
 
 The pipeline normalizes the object type, expands the query, and retrieves
 hybrid-style: dense (Qdrant + fastembed/ONNX in production) plus BM25 over
-candidates. Ranking prefers curated fragments and precise clause numbers.
-The federal layer (`RU-FED`) is mixed in explicitly, without replacing the
-regional act.
+candidates. Ranking prefers curated fragments and precise clause numbers. The
+federal layer (`RU-FED`) is mixed in explicitly, without replacing the regional
+act.
 
 A TF-IDF + LogisticRegression classifier routes requirements into commercial
 answer categories (holdout accuracy on the order of 88%).
@@ -62,7 +68,7 @@ retrieved fragments. No match — no clause in the answer. Empty retrieval —
 explicit refusal, no fabricated norm. A numeric guardrail additionally checks
 figures in the answer text.
 
-### Agent (LangGraph)
+### LangGraph agent
 
 Nodes drive the flow end-to-end:
 
@@ -75,17 +81,30 @@ Nodes drive the flow end-to-end:
 
 The LLM sits behind a provider abstraction: GigaChat Pro in production;
 YandexGPT is in the codebase with failover off by default — no agent rewrite
-required to switch.
+to switch.
 
 ### Production
 
-FastAPI (`/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`) + aiogram 3 +
-Docker. One image; process role via `SERVICE_ROLE=api|bot`. Vectors on Qdrant
-Cloud; embeddings on memory-tight hosts use ONNX (fastembed), without PyTorch
-in the runtime. Disk LLM cache avoids paying twice for the same request.
-Prometheus and Sentry are available via environment configuration.
+FastAPI + aiogram 3 + Docker. One image; process role via `SERVICE_ROLE=api|bot`.
+Vectors on Qdrant Cloud; embeddings on memory-tight hosts use ONNX (fastembed),
+without PyTorch in the runtime. Disk LLM cache avoids paying twice for the same
+request.
 
-### Evaluation
+### Observability
+
+A commercial contour needs visibility, not only answers:
+
+- Prometheus metrics on `GET /metrics` (including
+  `regiobuild_guardrail_blocks_total`, latency and HTTP errors via the
+  instrumentator)
+- Grafana Cloud: remote-write / scrape credentials in env; pipeline notes in
+  [`docs/GRAFANA.md`](docs/GRAFANA.md)
+- Sentry via `SENTRY_DSN`
+
+Metrics and the dashboard contour are part of the product; connecting scrape or
+Alloy remote write to the public Bothost API completes the Cloud ↔ runtime link.
+
+### Quality
 
 Recall@k and MRR for retrieval. Pytest in CI (light suite without torch).
 Post-deploy smoke checks that the contour is alive.
@@ -129,7 +148,7 @@ Deployment: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
 | `RU-SVE` | Sverdlovsk Oblast |
 | `RU-NVS` | Novosibirsk Oblast |
 | `RU-TA` | Republic of Tatarstan |
-| `RU-FED` | Federal layer (SP 42, excerpts from 123-FZ / SanPiN, etc.) |
+| `RU-FED` | Federal layer (SP 42, excerpts from 123-FZ / SanPiN) |
 
 The index is limited to this corpus and does not claim full coverage of Russian
 codes of practice or the full object classifier.
@@ -145,16 +164,16 @@ codes of practice or the full object classifier.
 - citation grounding and numeric guardrail  
 - hybrid retrieval, Qdrant, ISO regions  
 - requirement-category classifier  
-- Docker, CI, metrics, tests, smoke  
-- API-first surface (`/api/v1`) alongside the Telegram demo  
+- Docker, CI, Prometheus metrics, Grafana Cloud contour, tests, smoke  
+- API-first surface alongside the Telegram demo  
 
 **Next**
 
-- broader coverage (regions; municipal layer if needed)  
+- broader coverage (regions, municipal layer)  
 - robustness on atypical phrasings  
 - corpus refresh when norms change  
 - lower answer latency (cache, profiling)  
-- denser monitoring and alerting  
+- full scrape / remote write of metrics into Grafana Cloud in production  
 
 ---
 
@@ -171,7 +190,8 @@ codes of practice or the full object classifier.
 | Classification | scikit-learn (TF-IDF + LogisticRegression) |
 | LLM | GigaChat Pro |
 | Data | SQLAlchemy, Alembic |
-| Infrastructure | Docker, GitHub Actions, Prometheus, Sentry |
+| Observability | Prometheus `/metrics`, Grafana Cloud, Sentry |
+| Infrastructure | Docker, GitHub Actions |
 
 ---
 
@@ -196,8 +216,8 @@ pip install -r requirements.txt
 copy .env.example .env         # Linux/Mac: cp .env.example .env
 ```
 
-Configure GigaChat in `.env`, and optionally the bot token and Qdrant settings
-(`VECTOR_BACKEND=qdrant`, `EMBEDDING_BACKEND=fastembed`). For local Chroma:
+Configure GigaChat in `.env`, and optionally the bot token, Qdrant, and Grafana
+Cloud settings. For local Chroma:
 `pip install -r requirements-legacy-chroma.txt`.
 
 ```bash
@@ -224,8 +244,8 @@ Post-deploy smoke: `python -m scripts.smoke_wave1_prod --api-url https://…`.
 ## Usage limitations
 
 RegioBuild is a reference tool, not legal advice. Answers do not replace design
-documentation, counsel’s opinion, or a check that norms are current at the time
-of decision. Municipal PZZ acts are not in the index — verify them separately.
+documentation, counsel’s opinion, or a check that norms are current at decision
+time. Municipal PZZ acts are not in the index — verify them separately.
 
 Details (Russian): [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
 
