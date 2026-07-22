@@ -48,15 +48,30 @@ def _init_sentry() -> None:
 
 def _warmup_models() -> None:
     try:
+        from app.core.config import get_settings
         from app.embeddings.embedder import get_embedder
-        from app.vectorstore.chroma_store import get_chroma_store
 
-        logger.info("прогрев embedder + chroma...")
+        settings = get_settings()
+        logger.info(f"прогрев embedder + {settings.vector_backend}...")
         embedder = get_embedder()
-        store = get_chroma_store()
-        logger.info(f"embedder готов ({embedder.model_name}), векторов в chroma: {store.count()}")
+        if settings.vector_backend == "qdrant":
+            from app.vectorstore.qdrant_store import get_qdrant_store
+
+            store = get_qdrant_store()
+            logger.info(
+                f"embedder готов ({embedder.model_name}), "
+                f"векторов в qdrant: {store.count()}"
+            )
+        else:
+            from app.vectorstore.chroma_store import get_chroma_store
+
+            store = get_chroma_store()
+            logger.info(
+                f"embedder готов ({embedder.model_name}), "
+                f"векторов в chroma: {store.count()}"
+            )
     except Exception:
-        logger.exception("прогрев embedder/chroma не удался — API всё равно слушает порт")
+        logger.exception("прогрев embedder/векторного стора не удался — API всё равно слушает порт")
 
 
 def _warmup_mode() -> str:
