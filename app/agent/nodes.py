@@ -27,6 +27,7 @@ from app.core.npa_titles import (
 from app.core.regions import FEDERAL_CODE, get_region
 from app.llm.base import DEFAULT_MAX_TOKENS, LLMProviderError
 from app.llm.factory import get_llm_provider
+from app.llm.errors import friendly_llm_failure
 from app.llm.parsing import LLMParsingError, parse_json_response
 from app.llm.prompts import (
     BUSINESS_TYPE_NORMALIZATION_SYSTEM_PROMPT,
@@ -427,12 +428,11 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
             extraction = parse_json_response(raw_answer, ExtractionResult)
         except (LLMProviderError, LLMParsingError) as exc:
             logger.error(f"не удалось получить extraction от LLM: {exc}")
+            if isinstance(exc, LLMParsingError):
+                logger.warning(f"сырой ответ LLM (extraction, parse fail): {str(exc)[:800]}")
             return {
                 **state,
-                "error": (
-                    "Не удалось сформировать справку по ответу модели. "
-                    "Попробуйте ещё раз или укажите объект короче (например: торговый центр)."
-                ),
+                "error": friendly_llm_failure(exc, mode="info"),
             }
         # коды/тип берём из запроса, не из ответа модели
         allowed_chunks = list(state.get("retrieved_a", [])) + list(state.get("retrieved_federal", []))
@@ -464,12 +464,11 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         comparison = parse_json_response(raw_answer, ComparisonResult)
     except (LLMProviderError, LLMParsingError) as exc:
         logger.error(f"не удалось получить comparison от LLM: {exc}")
+        if isinstance(exc, LLMParsingError):
+            logger.warning(f"сырой ответ LLM (compare, parse fail): {str(exc)[:800]}")
         return {
             **state,
-            "error": (
-                "Не удалось сформировать сравнительную справку. "
-                "Попробуйте ещё раз или укажите объект короче."
-            ),
+            "error": friendly_llm_failure(exc, mode="compare"),
         }
 
     region_a = get_region(state["region_a"])
@@ -563,13 +562,14 @@ def _greeting_for_comparison(business_type: str, region_a_locative: str, region_
 
 
 def _normalize_citation(citation: str) -> str:
-    cleaned = (citation or "").strip()
+    cleaned = (citation or "").strip().strip("[]()«»\"'")
     while cleaned:
         lowered = cleaned.lower()
         matched = False
         for prefix in _CITATION_PREFIXES:
             if lowered.startswith(prefix):
-                cleaned = cleaned[len(prefix):].lstrip(" .;")
+                cleaned = cleaned[len(prefix):].lstrip(" .;:")
+                cleaned = cleaned.strip().strip("[]()«»\"'")
                 matched = True
                 break
         if not matched:
@@ -969,9 +969,15 @@ def format_response(state: AgentState) -> AgentState:
         + list(state.get("retrieved_b") or [])
         + list(state.get("retrieved_federal") or [])
     )
-    # для проверки берём plain text без html-тегов
-    plain = re.sub(r"<[^>]+>", "", body)
-    if context_chunks and not claim_numbers_supported(plain, context_chunks):
+    # шапка с реквизитами НПА даёт ложные срабатывания (даты постановлений)
+    guardrail_plain = re.sub(r"<[^>]+>", "", body)
+    guardrail_plain = "\n".join(
+        line
+        for line in guardrail_plain.splitlines()
+        if not line.lstrip().startswith(("🏛", "📜", "⚖"))
+        and "Правовое регулирование" not in line
+    )
+    if context_chunks and not claim_numbers_supported(guardrail_plain, context_chunks):
         logger.warning("guardrail заблокировал ответ")
         return {
             **state,
