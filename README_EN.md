@@ -2,15 +2,24 @@
 
 [Русская версия (основная)](README.md)
 
-**RegioBuild** is an API-first navigation service over regional urban-planning
-design standards (RNGP/TSN) in the Russian Federation, read against the federal
-normative layer. Given an object type and a region — or two regions for
-comparison — it returns a structured overview tied to specific clauses, with
-regional and federal levels kept distinct.
+Regional urban-planning design standards in Russia are a domain of their own.
+Each constituent entity has its own rules, document structure, and density of
+regulation. Federal norms set a baseline, but regional specifics can change
+everything — from building parameters to sanitary setbacks.
 
-The core is an HTTP API and a retrieval agent (LangGraph): corpus search, answer
-generation, and citation verification. The Telegram client is a demonstration
-channel; external systems use the same endpoints.
+Comparing this by hand takes hours. And even when it feels complete, something
+material is often missing. I know that from legal practice.
+
+In the United States, siting rules differ sharply across states; a similar
+pattern exists across Russian regions. The pain is not limited to developers —
+anyone placing a capital-construction object in a new region faces it.
+
+**RegioBuild** is an engineering response: an API-first navigator over RNGP/TSN
+corpora against the federal layer, with statements tied to clause numbers and a
+clear split between regional and federal regulation.
+
+Telegram is a demonstration channel. The core is an HTTP API that external
+clients can call directly.
 
 <p align="center">
   <img src="docs/screenshots/01-bot-about.png" alt="RegioBuild — Telegram overview" width="400"/>
@@ -18,46 +27,84 @@ channel; external systems use the same endpoints.
 
 ---
 
-## Problem
+## How it works
 
-In the United States, siting rules for construction differ materially across
-states. A similar pattern exists across constituent entities of the Russian
-Federation: regional RNGP/TSN texts diverge in substance and structure, and
-manual alignment with federal norms is slow and prone to missing material
-clauses.
+### Ingestion
 
-The gap affects not only developers and investors, but anyone planning a
-capital-construction object in a new region. RegioBuild addresses that need:
-a fast, auditable overview of applicable corpus fragments with source citations.
+Regional acts arrive as PDF, HTML, DOCX, and noisy tables with false numbering.
+A hierarchical parser extracts structured requirements; heuristics strip noise
+before indexing. Miss that step, and “clause 1” from a table caption lands in
+the vector store — and retrieval feeds the model garbage.
 
-Scope and limitations: [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md)
-(Russian).
+Corpus manifest and ISO region codes live in `config/documents.yaml` and
+`config/regions.yaml`. Municipal zoning (PZZ) is out of the current index.
 
----
+### Retrieval
 
-## Capabilities
+A user types “car wash”. The norms may say “car-wash bay”, “vehicle washing
+facility”, or bury the rule in a table. Single-shot semantic search is not
+enough.
 
-- FastAPI: `/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`
-- Telegram client (aiogram 3)
-- PDF corpus (federal layer and RNGP for five regions); hierarchical clause parsing
-- Hybrid retrieval (dense + BM25), citation grounding, numeric guardrail
-- Explicit refusal when the corpus does not support a claim
+The pipeline normalizes the object type, expands the query, and retrieves
+hybrid-style: dense (Qdrant + fastembed/ONNX in production) plus BM25 over
+candidates. Ranking prefers curated fragments and precise clause numbers.
+The federal layer (`RU-FED`) is mixed in explicitly, without replacing the
+regional act.
+
+A TF-IDF + LogisticRegression classifier routes requirements into commercial
+answer categories (holdout accuracy on the order of 88%).
+
+### Grounding
+
+The costliest failure mode in LegalTech is a confident invented clause number.
+Here it is blocked in code: every clause the model proposes is checked against
+retrieved fragments. No match — no clause in the answer. Empty retrieval —
+explicit refusal, no fabricated norm. A numeric guardrail additionally checks
+figures in the answer text.
+
+### Agent (LangGraph)
+
+Nodes drive the flow end-to-end:
+
+1. object-type normalization  
+2. query understanding and mode (overview / compare)  
+3. query transform  
+4. retrieval  
+5. requirement classification and rerank  
+6. grounded generation and formatting  
+
+The LLM sits behind a provider abstraction: GigaChat Pro in production;
+YandexGPT is in the codebase with failover off by default — no agent rewrite
+required to switch.
+
+### Production
+
+FastAPI (`/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`) + aiogram 3 +
+Docker. One image; process role via `SERVICE_ROLE=api|bot`. Vectors on Qdrant
+Cloud; embeddings on memory-tight hosts use ONNX (fastembed), without PyTorch
+in the runtime. Disk LLM cache avoids paying twice for the same request.
+Prometheus and Sentry are available via environment configuration.
+
+### Evaluation
+
+Recall@k and MRR for retrieval. Pytest in CI (light suite without torch).
+Post-deploy smoke checks that the contour is alive.
+
+Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).  
+Deployment: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
 
 <p align="center">
   <img src="docs/screenshots/02-bot-start.png" alt="Bot start" width="360"/>
   &nbsp;
-  <img src="docs/screenshots/03-bot-rules.png" alt="Rules and limitations" width="360"/>
+  <img src="docs/screenshots/03-bot-rules.png" alt="Usage limitations" width="360"/>
 </p>
 
 ---
 
 ## Modes
 
-1. **Single-region overview** — regional and federal requirements for an object.
+1. **Single-region overview** — regional and federal requirements for an object.  
 2. **Two-region comparison** — differences and overlaps with clause citations.
-
-Clause numbers proposed by the model are checked against retrieved fragments;
-unsupported numbers are omitted.
 
 <p align="center">
   <img src="docs/screenshots/04-bot-modes.png" alt="Mode selection" width="360"/>
@@ -82,11 +129,32 @@ unsupported numbers are omitted.
 | `RU-SVE` | Sverdlovsk Oblast |
 | `RU-NVS` | Novosibirsk Oblast |
 | `RU-TA` | Republic of Tatarstan |
-| `RU-FED` | Federal layer |
+| `RU-FED` | Federal layer (SP 42, excerpts from 123-FZ / SanPiN, etc.) |
 
 The index is limited to this corpus and does not claim full coverage of Russian
-codes of practice or the full object classifier. Municipal zoning (PZZ) is out of
-scope for the current index.
+codes of practice or the full object classifier.
+
+---
+
+## Status
+
+**Working prototype.** Full loop: ingestion → index → agent → API → Telegram.
+
+**Done**
+
+- citation grounding and numeric guardrail  
+- hybrid retrieval, Qdrant, ISO regions  
+- requirement-category classifier  
+- Docker, CI, metrics, tests, smoke  
+- API-first surface (`/api/v1`) alongside the Telegram demo  
+
+**Next**
+
+- broader coverage (regions; municipal layer if needed)  
+- robustness on atypical phrasings  
+- corpus refresh when norms change  
+- lower answer latency (cache, profiling)  
+- denser monitoring and alerting  
 
 ---
 
@@ -103,17 +171,11 @@ scope for the current index.
 | Classification | scikit-learn (TF-IDF + LogisticRegression) |
 | LLM | GigaChat Pro |
 | Data | SQLAlchemy, Alembic |
-| Quality | pytest; Recall@k, MRR |
 | Infrastructure | Docker, GitHub Actions, Prometheus, Sentry |
-
-One Docker image; process role via `SERVICE_ROLE=api` or `bot`.
-
-Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).  
-Deployment: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
 
 ---
 
-## Repository layout
+## Repository and run
 
 ```
 RegioBuild/
@@ -127,10 +189,6 @@ RegioBuild/
   Dockerfile
 ```
 
----
-
-## Local run
-
 ```bash
 python -m venv venv
 venv\Scripts\activate          # Linux/Mac: source venv/bin/activate
@@ -138,9 +196,9 @@ pip install -r requirements.txt
 copy .env.example .env         # Linux/Mac: cp .env.example .env
 ```
 
-Configure GigaChat credentials in `.env`, and optionally the bot token and
-Qdrant settings (`VECTOR_BACKEND=qdrant`, `EMBEDDING_BACKEND=fastembed`). For
-local Chroma: `pip install -r requirements-legacy-chroma.txt`.
+Configure GigaChat in `.env`, and optionally the bot token and Qdrant settings
+(`VECTOR_BACKEND=qdrant`, `EMBEDDING_BACKEND=fastembed`). For local Chroma:
+`pip install -r requirements-legacy-chroma.txt`.
 
 ```bash
 alembic upgrade head
@@ -153,18 +211,23 @@ python -m app.bot.main
 
 Or `docker compose up --build`. Postgres: `docker-compose.postgres.yml`.
 
----
-
-## Tests
-
 ```bash
 pytest
 python -m app.eval.retrieval_eval
 python -m app.eval.answer_eval
 ```
 
-CI (GitHub Actions) runs a light suite without torch. Post-deploy smoke:
-`python -m scripts.smoke_wave1_prod --api-url https://…`.
+Post-deploy smoke: `python -m scripts.smoke_wave1_prod --api-url https://…`.
+
+---
+
+## Usage limitations
+
+RegioBuild is a reference tool, not legal advice. Answers do not replace design
+documentation, counsel’s opinion, or a check that norms are current at the time
+of decision. Municipal PZZ acts are not in the index — verify them separately.
+
+Details (Russian): [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
 
 ---
 
