@@ -3,13 +3,20 @@
 На Pro обычно хватает. Автодеплой по git push лучше не включать: после пуша
 часто нужен recreate ботов, домены API меняются.
 
+Embeddings на Bothost: **fastembed (ONNX)**, без PyTorch. Иначе MiniLM+torch
+занимает ~750 MB и контейнер перестаёт отвечать на `/health` (504).
+
+Индекс Qdrant должен быть построен тем же backend (`EMBEDDING_BACKEND=fastembed`).
+
 ## Порядок после пуша
 
-1. Recreate **только API** (`SERVICE_ROLE=api`).
-2. Дождаться `/health` → `{"status":"ok"}` (не запускать два тяжёлых Sync сразу).
-3. В логах warmup: число векторов (с curated).
-4. Recreate **bot** (`SERVICE_ROLE=bot`) с новым `API_BASE_URL`.
-5. Smoke: `python -m scripts.smoke_wave1_prod --api-url https://bot-…-….bothost.tech`
+1. При смене embedding backend — локально переиндексировать Qdrant Cloud:
+   `EMBEDDING_BACKEND=fastembed python -m scripts.index_qdrant`
+2. Recreate **только API** (`SERVICE_ROLE=api`).
+3. Дождаться `/health` → `{"status":"ok"}` (не запускать два тяжёлых Sync сразу).
+4. В логах warmup: `backend=fastembed`, число векторов.
+5. Recreate **bot** (`SERVICE_ROLE=bot`) с новым `API_BASE_URL`.
+6. Smoke: `python -m scripts.smoke_wave1_prod --api-url https://bot-…-….bothost.tech`
 
 ## Env — API
 
@@ -19,7 +26,9 @@
 | `DATABASE_URL` | sqlite/файл на volume, который не затирается |
 | `LLM_PROVIDER` | `gigachat` |
 | креды GigaChat | из кабинета GigaChat Pro |
-| `WARMUP_ON_START` | `delayed` (не `immediate` на 2 GB) |
+| `VECTOR_BACKEND` | `qdrant` |
+| `EMBEDDING_BACKEND` | `fastembed` (явно; так же в образе) |
+| `WARMUP_ON_START` | `delayed` |
 | `WARMUP_DELAY_SEC` | `25` (по умолчанию ок) |
 | `SENTRY_DSN` | если нужен алертинг ошибок |
 | `LLM_CACHE_ENABLED` | `true` |
@@ -30,6 +39,7 @@
 - `GET /health` → ok
 - `GET /metrics` → Prometheus (если instrumentator в образе)
 - Sentry: при заданном DSN в логе есть `Sentry инициализирован`
+- RAM API после warmup обычно заметно ниже, чем у torch MiniLM (~150–350 MB порядка)
 
 ## Env — Bot
 
@@ -52,3 +62,6 @@
 На Bothost в API env: `VECTOR_BACKEND=qdrant`, `QDRANT_URL`, `QDRANT_API_KEY`,
 коллекция `regiobuild_normative`. Локально при необходимости Chroma:
 `pip install -r requirements-legacy-chroma.txt` и `VECTOR_BACKEND=chroma`.
+
+Enterprise / torch (e5-large): `pip install -r requirements-enterprise-embeddings.txt`,
+`DEPLOY_PROFILE=enterprise`, `EMBEDDING_BACKEND=sentence_transformers`.

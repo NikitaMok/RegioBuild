@@ -46,6 +46,10 @@ flowchart TD
   матчятся с канцеляритом НПА: сначала whitelist/корни, модель — если не вышло.
 - **Гибридный retrieval.** Dense (Qdrant) + лёгкий BM25 по кандидатам; при
   `VECTOR_BACKEND=chroma` — тот же контракт на legacy-индексе.
+- **Embeddings.** На Bothost/demo — `fastembed` (ONNX, без PyTorch в RAM).
+  Enterprise может использовать `sentence_transformers` (в т.ч. e5-large) через
+  `EMBEDDING_BACKEND` и `requirements-enterprise-embeddings.txt`. Индекс и
+  runtime должны совпадать по backend.
 - **Федеральный фон.** `RU-FED` не выбирается как «регион» в UI. Региональный
   акт в приоритете; федеральные фрагменты идут с явной пометкой уровня.
 - **Grounding и guardrail.** Пункты из JSON модели сверяются с

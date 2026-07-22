@@ -1,8 +1,11 @@
 """Индексация structured chunks → Qdrant.
 
-Запуск (нужен поднятый Qdrant):
-  docker compose --profile enterprise up -d qdrant
+Индексатор и runtime API должны использовать один embedding backend
+(на Bothost — fastembed). Иначе retrieval деградирует.
+
+Запуск (Qdrant Cloud или локальный):
   set VECTOR_BACKEND=qdrant
+  set EMBEDDING_BACKEND=fastembed
   python -m scripts.index_qdrant
 """
 
@@ -15,7 +18,7 @@ from pathlib import Path
 from loguru import logger
 
 from app.core.config import get_settings
-from app.embeddings.embedder import Embedder
+from app.embeddings.embedder import Embedder, resolve_embedding_backend, resolve_embedding_model_name
 from app.vectorstore.qdrant_store import QdrantStore
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -43,13 +46,13 @@ def run(*, reset: bool = True, batch_size: int = 64) -> int:
         logger.error(f"нет чанков в {CHUNKS_DIR} — сначала python -m scripts.parse_pdf_docs")
         return 1
 
-    logger.info(f"чанков к индексации: {len(chunks)}; profile={settings.deploy_profile}")
-    model_name = (
-        settings.embedding_model_enterprise
-        if settings.deploy_profile == "enterprise"
-        else settings.embedding_model_name
+    backend = resolve_embedding_backend()
+    model_name = resolve_embedding_model_name()
+    logger.info(
+        f"чанков к индексации: {len(chunks)}; profile={settings.deploy_profile}; "
+        f"backend={backend}; model={model_name}"
     )
-    embedder = Embedder(model_name=model_name)
+    embedder = Embedder(model_name=model_name, backend=backend)
     store = QdrantStore()
     if reset:
         store.reset()

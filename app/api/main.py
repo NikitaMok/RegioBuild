@@ -59,7 +59,7 @@ def _warmup_models() -> None:
 
             store = get_qdrant_store()
             logger.info(
-                f"embedder готов ({embedder.model_name}), "
+                f"embedder готов (backend={embedder.backend}, {embedder.model_name}), "
                 f"векторов в qdrant: {store.count()}"
             )
         else:
@@ -67,7 +67,7 @@ def _warmup_models() -> None:
 
             store = get_chroma_store()
             logger.info(
-                f"embedder готов ({embedder.model_name}), "
+                f"embedder готов (backend={embedder.backend}, {embedder.model_name}), "
                 f"векторов в chroma: {store.count()}"
             )
     except Exception:

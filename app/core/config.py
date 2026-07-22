@@ -29,10 +29,12 @@ class Settings(BaseSettings):
     qdrant_collection: str = "regiobuild_normative"
     qdrant_api_key: str = ""
 
-    # e5-large — enterprise; MiniLM — bothost-demo / legacy
+    # MiniLM — demo/Bothost; e5-large — enterprise
     embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     embedding_model_enterprise: str = "intfloat/multilingual-e5-large"
     deploy_profile: Literal["bothost-demo", "enterprise"] = "bothost-demo"
+    # пусто = auto: bothost-demo→fastembed, enterprise→sentence_transformers
+    embedding_backend: str = ""
 
     # Grafana Cloud (remote_write) — секреты только в .env
     grafana_cloud_prometheus_url: str = ""

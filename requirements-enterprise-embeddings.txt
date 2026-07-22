@@ -1,0 +1,4 @@
+# Тяжёлый torch-стек для enterprise / локальных экспериментов (e5-large и т.п.).
+# Прод Bothost на это не ставит — там fastembed из requirements.txt.
+--extra-index-url https://download.pytorch.org/whl/cpu
+sentence-transformers==3.3.1

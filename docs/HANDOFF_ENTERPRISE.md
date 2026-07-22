@@ -13,6 +13,7 @@
 - Манифест PDF: `config/documents.yaml` (municipal `ingest: false`)
 - Hierarchical PDF parser → `data/structured` (~7352 clauses / 7667 chunks)
 - Qdrant client, hybrid retrieve, rerank, guardrail, object categories
+- Embeddings на Bothost: **fastembed (ONNX)**; torch ST — опционально для enterprise
 - Граф: normalize → understand → query_transform → retrieve → classify → rerank → LLM → format
 - Скелеты `train_category_classifier.py`, `eval_golden.py` (ждут файлы автора)
 - `/api/v1/info`, `/api/v1/compare`, метрика guardrail blocks
