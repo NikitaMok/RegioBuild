@@ -19,7 +19,8 @@ sentence-transformers==3.3.1
 scikit-learn==1.6.0
 pandas==2.2.3
 numpy>=1.26,<3.0
-chromadb==0.5.23
+# chromadb — legacy; на Bothost/Qdrant не ставим (тяжёлый resolver OpenTelemetry).
+# Локально при VECTOR_BACKEND=chroma: pip install -r requirements-legacy-chroma.txt
 qdrant-client==1.12.1
 
 

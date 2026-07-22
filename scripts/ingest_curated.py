@@ -18,7 +18,6 @@ from app.db.models import Base, Chunk as ChunkRow, Document as DocumentRow
 from app.db.session import engine, get_session
 from app.embeddings.embedder import get_embedder
 from app.ingestion.federal_sources import all_curated_chunks, write_curated_jsonl
-from app.vectorstore.chroma_store import get_chroma_store
 
 
 def _needs_replace(existing_docs: list[str], curated_text: str) -> bool:
@@ -36,6 +35,15 @@ def main() -> None:
     Base.metadata.create_all(bind=engine)
     jsonl_path = write_curated_jsonl()
     logger.info(f"curated JSONL: {jsonl_path}")
+
+    try:
+        from app.vectorstore.chroma_store import get_chroma_store
+    except ImportError:
+        logger.warning(
+            "chromadb не установлен — curated записан в JSONL; "
+            "векторный upsert пропущен (Bothost/Qdrant)"
+        )
+        return
 
     chunks = all_curated_chunks()
     embedder = get_embedder()
