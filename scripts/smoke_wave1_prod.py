@@ -1,4 +1,4 @@
-"""Smoke волны 1 против прод-API Bothost.
+"""Smoke-проверки прод-API (Bothost).
 
 Примеры:
   python -m scripts.smoke_wave1_prod --api-url https://bot-xxx-yyy-nikitamok.bothost.tech
@@ -53,12 +53,12 @@ def _post_json(url: str, payload: dict, timeout: float = 180.0) -> tuple[int, di
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Smoke RegioBuild API (волна 1)")
+    parser = argparse.ArgumentParser(description="Smoke RegioBuild API")
     parser.add_argument("--api-url", required=True, help="Базовый URL API без хвоста /")
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Плюс /info кейсы волны 1 (нужен живой GigaChat)",
+        help="Плюс /info кейсы (нужен живой GigaChat)",
     )
     args = parser.parse_args()
     base = args.api_url.rstrip("/")

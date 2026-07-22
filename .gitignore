@@ -57,3 +57,7 @@ models/
 !data/chroma/**
 !app/classifier/artifacts/
 !app/classifier/artifacts/**
+
+# локальные артефакты отладки — не в git
+_gh_runs.json
+_info_resp.json

@@ -1,7 +1,7 @@
 # HANDOFF RegioBuild — состояние после PDF-корпуса и Qdrant
 
 Дата: 2026-07-22  
-План enterprise в `.cursor/plans/` — не править из чата без нужды.
+Внутренний handoff; публичный тон — README / ARCHITECTURE.
 
 ## HEAD
 

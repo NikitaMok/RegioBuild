@@ -6,7 +6,7 @@ import pytest
 from app.classifier import predict as predict_module
 from app.classifier.train import build_pipeline
 
-# игрушечный пайплайн вместо артефакта из git
+# заглушка пайплайна вместо артефакта из git
 TOY_TEXTS = [
     "Срок выдачи разрешения на строительство составляет 10 рабочих дней.",
     "Срок действия технических условий не может быть менее 3 лет.",
