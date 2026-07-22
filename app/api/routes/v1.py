@@ -1,17 +1,30 @@
-"""API v1 — коммерческий контур (Telegram остаётся воронкой)."""
+"""API v1 — коммерческий контур (Telegram остаётся воронкой).
+
+Отличия от legacy /info и /compare:
+- аутентификация по X-API-Key и дневной лимит на ключ;
+- машиночитаемая структура ответа (requirements/differences/sources)
+  с привязкой каждого пункта к НПА — для интеграций.
+"""
 
 from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from prometheus_client import Counter
 
 from app.agent.nodes import audit_sections_from_state
+from app.api.auth import ApiKeyContext, require_api_key
 from app.api.query_logging import log_query
 from app.api.rate_limit import RateLimitExceeded, ensure_within_daily_limit
 from app.api.schemas_v1 import AgentV1Response, CompareV1Request, InfoV1Request
+from app.api.serializers_v1 import (
+    commons_from_comparison,
+    differences_from_comparison,
+    requirements_from_extraction,
+    sources_for_regions,
+)
 from app.core.business_type import MAX_QUERY_LENGTH, looks_like_prompt_injection
 from app.core.regions import REGIONS, resolve_region_code
 
@@ -25,7 +38,11 @@ GUARDRAIL_BLOCKS = Counter(
 
 
 @router.post("/info", response_model=AgentV1Response)
-def info_v1(payload: InfoV1Request, request: Request) -> AgentV1Response:
+def info_v1(
+    payload: InfoV1Request,
+    request: Request,
+    api_key: ApiKeyContext | None = Depends(require_api_key),
+) -> AgentV1Response:
     try:
         region = resolve_region_code(payload.region)
     except ValueError as exc:
@@ -69,7 +86,16 @@ def info_v1(payload: InfoV1Request, request: Request) -> AgentV1Response:
         error_text=error,
         retrieved_sections=audit_sections_from_state(state),
         latency_ms=latency_ms,
+        api_key_id=api_key.id if api_key else None,
     )
+
+    extraction = state.get("extraction")
+    requirements = []
+    sources = []
+    if extraction and not blocked and not error:
+        requirements = requirements_from_extraction(extraction)
+        sources = sources_for_regions([region])
+
     return AgentV1Response(
         response_text=response_text,
         error=error,
@@ -77,11 +103,17 @@ def info_v1(payload: InfoV1Request, request: Request) -> AgentV1Response:
         guardrail_blocked=blocked,
         region=region,
         object_type=payload.object_type,
+        requirements=requirements,
+        sources=sources,
     )
 
 
 @router.post("/compare", response_model=AgentV1Response)
-def compare_v1(payload: CompareV1Request, request: Request) -> AgentV1Response:
+def compare_v1(
+    payload: CompareV1Request,
+    request: Request,
+    api_key: ApiKeyContext | None = Depends(require_api_key),
+) -> AgentV1Response:
     try:
         region_a = resolve_region_code(payload.region_a)
         region_b = resolve_region_code(payload.region_b)
@@ -134,7 +166,20 @@ def compare_v1(payload: CompareV1Request, request: Request) -> AgentV1Response:
         error_text=error,
         retrieved_sections=audit_sections_from_state(state),
         latency_ms=latency_ms,
+        api_key_id=api_key.id if api_key else None,
     )
+
+    comparison = state.get("comparison")
+    summary = None
+    differences = []
+    commons = []
+    sources = []
+    if comparison and not blocked and not error:
+        summary = comparison.overall_summary
+        differences = differences_from_comparison(comparison)
+        commons = commons_from_comparison(comparison)
+        sources = sources_for_regions([region_a, region_b])
+
     return AgentV1Response(
         response_text=response_text,
         error=error,
@@ -142,4 +187,8 @@ def compare_v1(payload: CompareV1Request, request: Request) -> AgentV1Response:
         guardrail_blocked=blocked,
         region=f"{region_a}|{region_b}",
         object_type=payload.object_type,
+        summary=summary,
+        differences=differences,
+        common_requirements=commons,
+        sources=sources,
     )

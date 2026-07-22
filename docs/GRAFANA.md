@@ -1,7 +1,9 @@
 # Grafana Cloud + RegioBuild
 
 Аккаунт Grafana Cloud уже создан. Метрики отдаёт FastAPI: `GET /metrics`
-(Prometheus text format), включая `regiobuild_guardrail_blocks_total`.
+(Prometheus text format), включая `regiobuild_guardrail_blocks_total`,
+`regiobuild_llm_tokens_total{provider,kind}` (экономика: prompt/completion
+токены по данным usage) и `regiobuild_llm_requests_total{provider,outcome}`.
 
 ## Быстрый старт после onboarding
 

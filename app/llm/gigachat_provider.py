@@ -64,9 +64,29 @@ class GigaChatProvider(LLMProvider):
                     max_tokens=max_tokens,
                 )
                 response = client.chat(chat)
+                self._observe_usage(response)
                 return response.choices[0].message.content
         except LLMProviderError:
             raise
         except Exception as exc:
             logger.error(f"GigaChat API вернул ошибку: {exc}")
+            from app.core.metrics import LLM_REQUESTS
+
+            LLM_REQUESTS.labels(provider=self.name, outcome="error").inc()
             raise LLMProviderError(str(exc)) from exc
+
+    def _observe_usage(self, response: object) -> None:
+        """Токены из usage → Prometheus; экономика запроса видна в /metrics."""
+        try:
+            from app.core.metrics import LLM_REQUESTS, observe_llm_usage
+
+            LLM_REQUESTS.labels(provider=self.name, outcome="ok").inc()
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                observe_llm_usage(
+                    self.name,
+                    getattr(usage, "prompt_tokens", None),
+                    getattr(usage, "completion_tokens", None),
+                )
+        except Exception as exc:  # noqa: BLE001 — метрики не должны ронять ответ
+            logger.debug(f"usage metrics skip: {exc}")

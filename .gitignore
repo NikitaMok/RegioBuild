@@ -61,3 +61,6 @@ models/
 # локальные артефакты отладки — не в git
 _gh_runs.json
 _info_resp.json
+
+# отчёты eval — артефакты прогонов; golden.jsonl остаётся в git
+data/eval/last_run.json

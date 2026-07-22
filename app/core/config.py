@@ -65,6 +65,9 @@ class Settings(BaseSettings):
 
     daily_query_limit: int = 30
 
+    # X-API-Key на /api/v1 (ключи — scripts.manage_api_keys); false — локальная разработка
+    api_auth_enabled: bool = True
+
     llm_cache_enabled: bool = True
     llm_cache_size: int = 256
     # пусто = рядом с sqlite БД (на Bothost обычно /app/data/llm_cache.json)

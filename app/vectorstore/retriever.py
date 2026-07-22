@@ -116,8 +116,6 @@ def _retrieve_qdrant(query: str, region_code: str | None, top_k: int) -> list[Re
     store = get_qdrant_store()
     query_embedding = embedder.encode_query(query).tolist()
     region_iso = resolve_region_code(region_code) if region_code else None
-    include_federal = True
-    # если явно просят federal — не дублировать should
     if region_iso == FEDERAL_CODE:
         rows = store.search(
             query_embedding,
@@ -126,10 +124,12 @@ def _retrieve_qdrant(query: str, region_code: str | None, top_k: int) -> list[Re
             top_k=top_k,
         )
     else:
+        # федеральный слой агент тянет отдельным запросом (RU-FED);
+        # примесь federal здесь размывала региональный top-k
         rows = store.search(
             query_embedding,
             region_iso=region_iso,
-            include_federal=include_federal,
+            include_federal=False,
             top_k=top_k,
         )
     return [
