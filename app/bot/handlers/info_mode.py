@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.bot.api_client import ApiClientError, request_info
-from app.bot.keyboards import cancel_keyboard, main_menu_keyboard, region_keyboard, response_keyboard
+from app.bot.keyboards import cancel_keyboard, region_keyboard, response_keyboard, start_menu_keyboard
 from app.bot.messaging import answer_html_chunks
 from app.bot.states import InfoFlow
 from app.core.business_type import looks_like_business_query
@@ -25,7 +25,12 @@ INVALID_BUSINESS_REPLY = (
     "строительства кратко, например: кафе, автомойка, склад, медицинский центр и т.д."
 )
 
-WAIT_TEXT = "Ищу нормы по запросу, подождите…"
+WAIT_TEXT = (
+    "Выполняется анализ нормативных требований по указанному объекту. "
+    "Пожалуйста, подождите."
+)
+
+BACKEND_ERROR_PREFIX = "⚠️ Не удалось получить ответ сервиса"
 
 
 @router.callback_query(F.data == "mode:info")
@@ -60,9 +65,16 @@ async def receive_region(callback: CallbackQuery, state: FSMContext) -> None:
     try:
         answer = await request_info(business_type, region_code, telegram_user_id=telegram_user_id)
     except ApiClientError as exc:
-        await callback.message.answer(f"⚠️ {exc}", reply_markup=main_menu_keyboard())
+        await callback.message.answer(
+            f"{BACKEND_ERROR_PREFIX}: {exc}",
+            reply_markup=start_menu_keyboard(),
+        )
     else:
-        keyboard = response_keyboard(answer.query_log_id) if answer.query_log_id else main_menu_keyboard()
+        keyboard = (
+            response_keyboard(answer.query_log_id)
+            if answer.query_log_id
+            else start_menu_keyboard()
+        )
         await answer_html_chunks(callback.message, answer.response_text, reply_markup=keyboard)
 
     await state.clear()

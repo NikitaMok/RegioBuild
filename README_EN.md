@@ -2,15 +2,18 @@
 
 [Русская версия (основная)](README.md)
 
-A service for comparing **regional urban-planning design standards (RNGP/TSN)**
-of constituent entities of the Russian Federation against the federal layer
-(SP 42.13330.2016, excerpts from Federal Law No. 123-FZ of 22 July 2008, and
-sanitary rules and norms).
+A reference service for comparing **regional urban-planning design standards
+(RNGP/TSN)** of constituent entities of the Russian Federation against the
+federal normative layer (SP 42.13330.2016, excerpts from Federal Law
+No. 123-FZ of 22 July 2008, and sanitary rules and norms).
 
 The core is an HTTP API and a LangGraph RAG agent: statements in the answer are
-tied to a specific normative clause, with regional and federal levels kept
-distinct. The Telegram client is a demonstration UI; the same API can be called
-from an external service.
+tied to a specific clause of a normative act, with regional and federal levels
+kept distinct. The Telegram client is a demonstration UI; the same API can be
+called from an external service.
+
+Outputs are **reference material only**. They are not legal advice and do not
+replace an opinion of counsel or a design organisation.
 
 <p align="center">
   <img src="docs/screenshots/01-bot-about.png" alt="RegioBuild — Telegram overview" width="400"/>
@@ -18,40 +21,34 @@ from an external service.
 
 ---
 
-## Problem
+## Purpose
 
-Siting rules for capital-construction objects vary widely across Russian
-regions. Comparing regional RNGP texts with federal norms by hand is slow and
-easy to get wrong on material clauses.
+Siting rules for capital-construction objects differ across Russian regions in
+substance and document structure. Manual comparison of regional RNGP texts with
+federal norms is time-consuming and prone to missing material clauses.
 
-RegioBuild returns a **reference overview** for an object type and one region
-(or two regions in compare mode), with clause numbers and regulation level.
-It is not legal advice and not an opinion on whether a particular plot may be
-developed.
+RegioBuild returns a clause-cited overview for an object type and one region
+(or two regions in compare mode). It does not assess whether a particular plot
+may be developed and does not cover municipal zoning (PZZ) outside the current
+index.
+
+Legal status (Russian): [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
 
 ---
 
-## What is in the repo
+## Capabilities
 
-- Telegram client (aiogram 3) and FastAPI (`/info`, `/compare`, `/api/v1/*`,
-  `/health`, `/metrics`)
-- PDF corpus (federal layer + RNGP for five regions), hierarchical clause
-  parsing, hybrid retrieval (dense + BM25)
-- Vector store: **Qdrant** (primary); Chroma kept as a local legacy option
-- Citation grounding against retrieved fragments and a numeric guardrail
-- Disclaimer and an explicit refusal when the corpus does not support a claim
-
-This is a **working prototype**. Municipal zoning (PZZ) is out of scope for the
-current index; coverage by object type and behaviour on rare phrasings are still
-limited.
+- FastAPI: `/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`
+- Telegram client (aiogram 3)
+- PDF corpus: federal layer and RNGP for five regions; hierarchical clause parsing
+- Hybrid retrieval (dense + BM25), citation grounding, numeric guardrail
+- Explicit refusal when the corpus does not support a claim
 
 <p align="center">
   <img src="docs/screenshots/02-bot-start.png" alt="Start: legal status" width="360"/>
   &nbsp;
   <img src="docs/screenshots/03-bot-rules.png" alt="Rules and disclaimer" width="360"/>
 </p>
-
-Legal status (Russian): [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
 
 ---
 
@@ -61,8 +58,8 @@ Legal status (Russian): [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
    capital-construction object.
 2. **Two-region comparison** — differences and overlaps with clause citations.
 
-Clause numbers proposed by the model are checked against retrieved fragments.
-Unsupported numbers are dropped.
+Clause numbers proposed by the model are checked against retrieved fragments;
+unsupported numbers are omitted.
 
 <p align="center">
   <img src="docs/screenshots/04-bot-modes.png" alt="Mode selection" width="360"/>
@@ -80,15 +77,17 @@ Unsupported numbers are dropped.
 
 ## Corpus coverage
 
-Regions in the index: Moscow Oblast, Krasnodar Krai, Sverdlovsk Oblast,
-Novosibirsk Oblast, Republic of Tatarstan (ISO 3166-2: `RU-MOS`, `RU-KDA`,
-`RU-SVE`, `RU-NVS`, `RU-TA`). Federal layer: `RU-FED`.
+| ISO 3166-2 | Entity |
+|------------|--------|
+| `RU-MOS` | Moscow Oblast |
+| `RU-KDA` | Krasnodar Krai |
+| `RU-SVE` | Sverdlovsk Oblast |
+| `RU-NVS` | Novosibirsk Oblast |
+| `RU-TA` | Republic of Tatarstan |
+| `RU-FED` | Federal layer |
 
-Municipal Novosibirsk PDFs are listed in the manifest but **not ingested**;
-they are reserved for a later stage.
-
-The index does not claim full coverage of Russian codes of practice or the full
-object classifier.
+The index is limited to this corpus and does not claim full coverage of Russian
+codes of practice or the full capital-construction object classifier.
 
 ---
 
@@ -100,18 +99,18 @@ object classifier.
 | Backend | FastAPI |
 | Client | aiogram 3 |
 | Orchestration | LangGraph |
-| Embeddings | sentence-transformers (multilingual MiniLM; optional e5-large) |
-| Vector DB | Qdrant (primary), Chroma (legacy) |
+| Embeddings | sentence-transformers (MiniLM; optional e5-large) |
+| Vector DB | Qdrant (primary); Chroma as local legacy |
 | Classification | scikit-learn (TF-IDF + LogisticRegression) |
-| LLM | GigaChat Pro (production); YandexGPT present in code, failover off by default |
-| Data | SQLAlchemy, Alembic, disk LLM cache |
+| LLM | GigaChat Pro |
+| Data | SQLAlchemy, Alembic |
 | Quality | pytest; Recall@k, MRR |
 | Infrastructure | Docker, GitHub Actions, Prometheus, Sentry |
 
-Single Docker image; process role via `SERVICE_ROLE=api|bot`.
+One Docker image; process role via `SERVICE_ROLE=api` or `bot`.
 
-Pipeline: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Russian).  
-Deploy notes: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md) (Russian).
+Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).  
+Deployment: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
 
 ---
 
@@ -140,13 +139,13 @@ pip install -r requirements.txt
 copy .env.example .env         # Linux/Mac: cp .env.example .env
 ```
 
-Put GigaChat credentials (and bot token if needed) in `.env`, plus Qdrant
-settings (`VECTOR_BACKEND=qdrant`). For local Chroma:
+Configure GigaChat credentials in `.env`, and optionally the bot token and
+Qdrant settings (`VECTOR_BACKEND=qdrant`). For local Chroma:
 `pip install -r requirements-legacy-chroma.txt`.
 
 ```bash
 alembic upgrade head
-python -m scripts.parse_pdf_docs
+python -m scripts.parse_pdf_docs   # if data/raw/docs is present
 python -m scripts.index_qdrant
 
 uvicorn app.api.main:app --reload
@@ -165,14 +164,14 @@ python -m app.eval.retrieval_eval
 python -m app.eval.answer_eval
 ```
 
-CI runs a reduced suite without torch. Post-deploy smoke:
+CI (GitHub Actions) runs a light suite without torch. Post-deploy smoke:
 `python -m scripts.smoke_wave1_prod --api-url https://…`.
 
 ---
 
 ## Author
 
-Nikita Mokin
+Nikita Mokin / Никита Мокин
 
 [GitHub](https://github.com/NikitaMok) · [LinkedIn](https://ru.linkedin.com/in/mokinnikita)
 
@@ -180,9 +179,10 @@ Nikita Mokin
 
 ## Rights
 
-© Nikita Mokin. **All rights reserved.**
+© Nikita Mokin / Никита Мокин. **All rights reserved.**
 
-Copying the repository, reproducing substantial parts of the solution, and
-using the code or product commercially **without prior written consent of the
-rights holder is prohibited**. Sources on GitHub are for review and portfolio
-demonstration and do not grant a commercial licence.
+Copying the repository, reproducing material parts of the solution, and
+commercial use of the code or product **without prior written consent of the
+rights holder are prohibited**. Publication on GitHub is for review and
+demonstration of competence and does not grant a licence for commercial
+exploitation.

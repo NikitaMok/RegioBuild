@@ -6,14 +6,14 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from app.bot.api_client import send_feedback
-from app.bot.keyboards import main_menu_keyboard
+from app.bot.keyboards import start_menu_keyboard
 
 router = Router(name="feedback")
 
-THANKS_TEXT = "Спасибо за оценку."
+THANKS_TEXT = "Благодарим за оценку."
 APOLOGY_TEXT = (
-    "Спасибо за оценку — так проще понять, где корпус или формулировка "
-    "ответа ещё слабые."
+    "Благодарим за оценку. Она помогает выявить пробелы в корпусе "
+    "и в формулировках ответов."
 )
 
 
@@ -26,6 +26,6 @@ async def handle_feedback(callback: CallbackQuery) -> None:
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer(
         THANKS_TEXT if vote == "up" else APOLOGY_TEXT,
-        reply_markup=main_menu_keyboard(),
+        reply_markup=start_menu_keyboard(),
     )
     await callback.answer()
