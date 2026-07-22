@@ -1,4 +1,4 @@
-"""Локальный smoke retrieval волны 1 (без LLM / без Bothost)."""
+"""Локальный smoke retrieval по опорным curated-секциям (без LLM / без Bothost)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Тесты матрицы покрытия волны 1 и honest fallback."""
+"""Тесты матрицы покрытия пилотных типов объектов и honest fallback."""
 
 from __future__ import annotations
 
