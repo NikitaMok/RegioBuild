@@ -30,6 +30,29 @@ def resolve_embedding_model_name() -> str:
     return settings.embedding_model_name
 
 
+def _configure_ort_low_memory() -> None:
+    """Сжимает RSS onnxruntime: без CPU arena и с одним потоком."""
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return
+    if getattr(ort, "_regiobuild_low_mem", False):
+        return
+
+    original = ort.InferenceSession
+
+    def _session(path_or_bytes, sess_options=None, providers=None, **kwargs):  # noqa: ANN001
+        options = sess_options or ort.SessionOptions()
+        options.enable_cpu_mem_arena = False
+        options.enable_mem_pattern = False
+        options.intra_op_num_threads = 1
+        options.inter_op_num_threads = 1
+        return original(path_or_bytes, sess_options=options, providers=providers, **kwargs)
+
+    ort.InferenceSession = _session  # type: ignore[misc, assignment]
+    ort._regiobuild_low_mem = True  # type: ignore[attr-defined]
+
+
 class Embedder:
     """Единый контракт encode_* для индексации и retrieval.
 
@@ -57,6 +80,7 @@ class Embedder:
 
         from fastembed import TextEmbedding
 
+        _configure_ort_low_memory()
         try:
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -64,7 +88,7 @@ class Embedder:
                     message=r".*mean pooling instead of CLS.*",
                     category=UserWarning,
                 )
-                self._model = TextEmbedding(model_name=self.model_name)
+                self._model = TextEmbedding(model_name=self.model_name, threads=1)
         except Exception as exc:
             if self.model_name == _FALLBACK_EMBEDDING_MODEL:
                 raise
@@ -79,7 +103,7 @@ class Embedder:
                     message=r".*mean pooling instead of CLS.*",
                     category=UserWarning,
                 )
-                self._model = TextEmbedding(model_name=self.model_name)
+                self._model = TextEmbedding(model_name=self.model_name, threads=1)
 
     def _init_sentence_transformers(self) -> None:
         try:
@@ -108,7 +132,6 @@ class Embedder:
         if self.backend == "fastembed":
             vectors = list(self._model.embed(texts, batch_size=batch_size))
             arr = np.asarray(vectors, dtype=np.float32)
-            # L2-нормализация для cosine в Qdrant (как у SentenceTransformer normalize_embeddings=True)
             norms = np.linalg.norm(arr, axis=1, keepdims=True)
             norms = np.maximum(norms, 1e-12)
             return arr / norms

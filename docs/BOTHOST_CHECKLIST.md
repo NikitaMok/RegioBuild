@@ -3,8 +3,9 @@
 На Pro обычно хватает. Автодеплой по git push лучше не включать: после пуша
 часто нужен recreate ботов, домены API меняются.
 
-Embeddings на Bothost: **fastembed (ONNX)**, без PyTorch. Иначе MiniLM+torch
-занимает ~750 MB и контейнер перестаёт отвечать на `/health` (504).
+Embeddings на Bothost: **fastembed (ONNX)**, без PyTorch. В образе `WARMUP_ON_START=off`
+(фоновый прогрев на Bothost часто подвешивает процесс). Модель поднимается на
+первом запросе; `/health` должен отвечать сразу после старта uvicorn.
 
 Индекс Qdrant должен быть построен тем же backend (`EMBEDDING_BACKEND=fastembed`).
 
@@ -28,8 +29,7 @@ Embeddings на Bothost: **fastembed (ONNX)**, без PyTorch. Иначе MiniLM
 | креды GigaChat | из кабинета GigaChat Pro |
 | `VECTOR_BACKEND` | `qdrant` |
 | `EMBEDDING_BACKEND` | `fastembed` (явно; так же в образе) |
-| `WARMUP_ON_START` | `delayed` |
-| `WARMUP_DELAY_SEC` | `25` (по умолчанию ок) |
+| `WARMUP_ON_START` | `off` (в образе по умолчанию; `delayed` на Bothost не использовать) |
 | `SENTRY_DSN` | если нужен алертинг ошибок |
 | `LLM_CACHE_ENABLED` | `true` |
 | `LOG_JSON` | по желанию `true` для разбора логов |
