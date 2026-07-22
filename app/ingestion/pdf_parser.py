@@ -10,8 +10,18 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-import pdfplumber
 from loguru import logger
+
+
+def _pdfplumber():
+    """Ленивый импорт: unit-тесты иерархии не требуют pdfplumber в CI."""
+    try:
+        import pdfplumber
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            "для парсинга PDF установите pdfplumber (см. requirements.txt)"
+        ) from exc
+    return pdfplumber
 
 # пункт вида 5.2.3 / 5.2 / 12
 _CLAUSE_LINE = re.compile(
@@ -137,6 +147,7 @@ def _table_to_text(table: list[list[str | None]] | None) -> str:
 def extract_pdf_lines(path: Path) -> list[tuple[int, str]]:
     """Возвращает (page_number, line) по всему PDF."""
     lines: list[tuple[int, str]] = []
+    pdfplumber = _pdfplumber()
     with pdfplumber.open(str(path)) as pdf:
         for page_idx, page in enumerate(pdf.pages, start=1):
             text = page.extract_text() or ""
@@ -151,6 +162,7 @@ def extract_pdf_tables(path: Path) -> list[tuple[int, str]]:
     """Список (page, table_text); ошибки отдельных таблиц пропускаем."""
     tables: list[tuple[int, str]] = []
     try:
+        pdfplumber = _pdfplumber()
         with pdfplumber.open(str(path)) as pdf:
             for page_idx, page in enumerate(pdf.pages, start=1):
                 try:
