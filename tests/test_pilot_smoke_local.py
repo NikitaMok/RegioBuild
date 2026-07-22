@@ -8,11 +8,17 @@ from app.vectorstore.types import RetrievedChunk
 
 
 def test_local_wave1_curated_anchors_present() -> None:
-    by_key = {(c.region_code, c.section_number): c for c in all_curated_chunks()}
+    chunks = all_curated_chunks()
+    by_key = {(c.region_code, c.section_number): c for c in chunks}
     assert ("krasnodar_krai", "5.5.153") in by_key or any(
-        c.section_number and "5.5.153" in c.section_number for c in all_curated_chunks()
+        c.section_number and "5.5.153" in c.section_number for c in chunks
     )
-    federal_sections = {c.section_number for c in all_curated_chunks() if c.region_code == "federal"}
+    # ISO RU-FED + legacy alias «federal»
+    federal_sections = {
+        c.section_number
+        for c in chunks
+        if c.region_code in {"federal", "RU-FED"}
+    }
     assert any("123-ФЗ" in (s or "") or "СанПиН" in (s or "") for s in federal_sections)
 
 
