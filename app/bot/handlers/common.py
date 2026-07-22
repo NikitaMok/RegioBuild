@@ -11,11 +11,14 @@ from app.core.legal import DISCLAIMER_TEXT, LEGAL_BOUNDARIES_HTML
 router = Router(name="common")
 
 WELCOME_TEXT = (
-    "RegioBuild — справочник по региональным строительным нормативам "
-    "(РНГП/ТСН) для коммерческого размещения.\n\n"
+    "<b>RegioBuild</b>\n\n"
+    "Справочный сервис по региональным нормативам градостроительного "
+    "проектирования (РНГП/ТСН) и федеральному нормативному фону "
+    "для объектов капитального строительства.\n\n"
     f"{LEGAL_BOUNDARIES_HTML}\n\n"
-    "Сначала откройте «Обязательно к прочтению» — там ограничения и как "
-    "спрашивать."
+    "Перед первым запросом ознакомьтесь с разделом "
+    "«Обязательно к прочтению» — в нём изложены пределы применения сервиса "
+    "и порядок формулирования запроса."
 )
 
 RULES_TEXT = (
@@ -81,5 +84,5 @@ async def back_to_start(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "cancel")
 async def cancel_flow(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("Отменено. Выберите режим:", reply_markup=query_menu_keyboard())
+    await callback.message.edit_text(WELCOME_TEXT, reply_markup=start_menu_keyboard())
     await callback.answer()
