@@ -99,7 +99,7 @@ codes of practice or the full capital-construction object classifier.
 | Backend | FastAPI |
 | Client | aiogram 3 |
 | Orchestration | LangGraph |
-| Embeddings | sentence-transformers (MiniLM; optional e5-large) |
+| Embeddings | fastembed/ONNX (MiniLM on Bothost); optional sentence-transformers (enterprise) |
 | Vector DB | Qdrant (primary); Chroma as local legacy |
 | Classification | scikit-learn (TF-IDF + LogisticRegression) |
 | LLM | GigaChat Pro |

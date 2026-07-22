@@ -100,7 +100,7 @@ RegioBuild по запросу (тип объекта и субъект либо
 | Backend | FastAPI |
 | Клиент | aiogram 3 |
 | Оркестрация | LangGraph |
-| Embeddings | sentence-transformers (MiniLM; опционально e5-large) |
+| Embeddings | fastembed/ONNX (MiniLM, Bothost); опционально sentence-transformers (enterprise) |
 | Vector DB | Qdrant (основной контур); Chroma — локальный legacy |
 | Классификация | scikit-learn (TF-IDF + LogisticRegression) |
 | LLM | GigaChat Pro |

@@ -1,5 +1,3 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-
 # Backend
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
@@ -14,13 +12,14 @@ SQLAlchemy==2.0.36
 alembic==1.14.0
 psycopg2-binary==2.9.10
 
-# ML / NLP
-sentence-transformers==3.3.1
+# ML / NLP — прод Bothost: ONNX via fastembed (без PyTorch в runtime RAM)
+fastembed==0.6.1
 scikit-learn==1.6.0
 pandas==2.2.3
 numpy>=1.26,<3.0
 # chromadb — legacy; на Bothost/Qdrant не ставим (тяжёлый resolver OpenTelemetry).
 # Локально при VECTOR_BACKEND=chroma: pip install -r requirements-legacy-chroma.txt
+# Torch/ST (e5-large и т.п.): pip install -r requirements-enterprise-embeddings.txt
 qdrant-client==1.12.1
 
 
