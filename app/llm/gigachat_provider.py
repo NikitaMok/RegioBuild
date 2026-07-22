@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
 from app.llm.base import DEFAULT_MAX_TOKENS, LLMProvider, LLMProviderError
+
+
+def _is_retryable_gigachat_error(exc: BaseException) -> bool:
+    """401/403 не ретраим — credentials/права не «починятся» за 3 попытки."""
+    if not isinstance(exc, LLMProviderError):
+        return True
+    text = str(exc).lower()
+    if "401" in text or "403" in text or "credentials" in text or "doesn't match" in text:
+        return False
+    return True
 
 
 class GigaChatProvider(LLMProvider):
@@ -22,7 +32,12 @@ class GigaChatProvider(LLMProvider):
         self._model = settings.gigachat_model
         self._verify_ssl_certs = settings.gigachat_verify_ssl_certs
 
-    @retry(reraise=True, stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=8))
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        retry=retry_if_exception(_is_retryable_gigachat_error),
+    )
     def complete(
         self,
         system_prompt: str,
@@ -50,6 +65,8 @@ class GigaChatProvider(LLMProvider):
                 )
                 response = client.chat(chat)
                 return response.choices[0].message.content
+        except LLMProviderError:
+            raise
         except Exception as exc:
             logger.error(f"GigaChat API вернул ошибку: {exc}")
             raise LLMProviderError(str(exc)) from exc

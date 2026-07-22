@@ -27,3 +27,22 @@ def test_guardrail_blocks_invented_percent() -> None:
     ]
     assert claim_numbers_supported("отступ 6 метров", chunks)
     assert not claim_numbers_supported("нужно озеленение 37% территории", chunks)
+
+
+def test_guardrail_ignores_npa_header_dates() -> None:
+    chunks = [
+        RetrievedChunk(
+            id="1",
+            text="Для автомоек расстояние не менее 50 метров.",
+            region_code="RU-KDA",
+            section_number="5.5.153",
+            category=None,
+            distance=0.1,
+        )
+    ]
+    headerish = (
+        "Правовое регулирование: Постановление от 17.08.2015 N 713/30 "
+        "(проверено 2026-07-22). Федеральный уровень: СП 42 и 123-ФЗ. "
+        "Автомойка: 50 метров по п. 5.5.153."
+    )
+    assert claim_numbers_supported(headerish, chunks)

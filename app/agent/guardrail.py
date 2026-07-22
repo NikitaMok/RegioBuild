@@ -10,6 +10,8 @@ from loguru import logger
 from app.vectorstore.types import RetrievedChunk
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?%?")
+_YEAR = re.compile(r"^(?:19|20)\d{2}$")
+_DATE_DM = re.compile(r"^\d{1,2}\.\d{1,2}$")
 _SAFE_REFUSAL = (
     "Внимание: система обнаружила неточность при верификации пунктов. "
     "Чтобы защитить от ошибочных цифр, ответ заблокирован. "
@@ -21,34 +23,43 @@ def _numbers_in(text: str) -> set[str]:
     return {m.group(0).replace(",", ".") for m in _NUMBER.finditer(text or "")}
 
 
+def _is_boilerplate_number(n: str) -> bool:
+    """Даты реквизитов НПА и годы — не повод блокировать ответ."""
+    if _YEAR.fullmatch(n) or _DATE_DM.fullmatch(n):
+        return True
+    # типичный шум шапки: «N 713/30», день месяца
+    if n.isdigit() and len(n) <= 2:
+        return True
+    return False
+
+
 def claim_numbers_supported(answer: str, chunks: list[RetrievedChunk], *, min_ratio: float = 0.85) -> bool:
     """Основные числа из ответа должны встречаться в контексте (или быть номерами пунктов)."""
-    context = "\n".join(c.text for c in chunks)
+    context_parts: list[str] = []
+    for chunk in chunks:
+        if chunk.section_number:
+            context_parts.append(str(chunk.section_number))
+        context_parts.append(chunk.text or "")
+    context = "\n".join(context_parts)
     context_nums = _numbers_in(context)
     answer_nums = _numbers_in(answer)
-    # отсекаем годы и слишком общие
     suspicious = {
         n
         for n in answer_nums
         if n not in context_nums
-        and not n.endswith("%")  # % тоже должны быть в контексте
+        and not n.endswith("%")
         and len(n) <= 6
+        and not _is_boilerplate_number(n)
     }
-    # проценты без опоры — блок
     pct_bad = [n for n in answer_nums if n.endswith("%") and n not in context_nums]
     if pct_bad:
         logger.warning(f"guardrail: проценты без опоры {pct_bad}")
         return False
-    # если много «лишних» чисел — блок
     if len(suspicious) >= 3:
         logger.warning(f"guardrail: лишние числа {suspicious}")
         return False
-    # грубая похожесть на контекст
     if context and answer:
-        ratio = SequenceMatcher(None, answer[:2000].lower(), context[:5000].lower()).ratio()
-        if ratio < 0.02 and len(answer) > 400:
-            # слишком мало пересечения с длинным ответом — подозрительно, но JSON/HTML шумны
-            pass
+        SequenceMatcher(None, answer[:2000].lower(), context[:5000].lower()).ratio()
     return True
 
 
