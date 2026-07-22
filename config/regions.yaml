@@ -1,5 +1,6 @@
 # ISO 3166-2 коды субъектов + федеральный слой.
 # aliases — старые коды (moscow_oblast и т.п.) для обратной совместимости API/бота.
+# source_url — справочная ссылка на первоисточник (не URL сбора в README).
 
 regions:
   RU-MOS:
@@ -8,7 +9,7 @@ regions:
     document_title: >-
       Постановление Правительства МО от 17.08.2015 N 713/30
       "Об утверждении нормативов градостроительного проектирования Московской области"
-    source_url: ""
+    source_url: https://meganorm.ru/mega_doc/dop1/84/postanovlenie_administratsii_gorodskogo_okruga_balashikha_mo/0/postanovlenie_pravitelstva_mo_ot_17_08_2015_N_713_30_red_ot.html
     local_raw_filename: docs/Об_утверждении_нормативов_градостроительного_проектирования_Московской_области_с_изменениями_на_2_ию.pdf
     fetch_format: pdf
     last_verified: "2026-07-22"
@@ -22,7 +23,7 @@ regions:
       Приказ департамента по архитектуре и градостроительству Краснодарского края
       от 16.04.2015 N 78 "Об утверждении нормативов градостроительного проектирования
       Краснодарского края"
-    source_url: ""
+    source_url: https://admnvrsk.ru/gorozhanam/gradostroitelnaya-deyatelnost/normativy-gradostroitelnogo-proektirovaniya/
     local_raw_filename: docs/Об_утверждении_нормативов_градостроительного_проектирования_Краснодарского_края_с_изменениями_на_11_.pdf
     fetch_format: pdf
     last_verified: "2026-07-22"
@@ -36,7 +37,7 @@ regions:
       Приказ Министерства строительства и развития инфраструктуры Свердловской
       области от 01.08.2023 N 435-П "Об утверждении региональных нормативов
       градостроительного проектирования Свердловской области"
-    source_url: ""
+    source_url: http://proj66.ru/6600.svo/%D0%9D%D0%93%D0%9F%D0%A1%D0%9E.htm
     local_raw_filename: docs/Об_утверждении_региональных_нормативов_градостроительного_проектирования_Свердловской_области.pdf
     fetch_format: pdf
     last_verified: "2026-07-22"
@@ -50,7 +51,7 @@ regions:
       Постановление Правительства Новосибирской области от 12.08.2015 N 303-п
       "Об утверждении региональных нормативов градостроительного проектирования
       Новосибирской области" (с изменениями)
-    source_url: ""
+    source_url: https://novosib-gov.ru/doc/90836
     local_raw_filename: docs/Об_утверждении_региональных_нормативов_градостроительного_проектирования_Новосибирской_области_с_изм.pdf
     fetch_format: pdf
     last_verified: "2026-07-22"
@@ -64,7 +65,7 @@ regions:
       Постановление Кабинета Министров Республики Татарстан от 27.12.2013 N 1071
       "Об утверждении республиканских нормативов градостроительного проектирования
       Республики Татарстан" (с изменениями)
-    source_url: ""
+    source_url: https://meganorm.ru/Data2/1/4293726/4293726081.htm
     local_raw_filename: docs/Об_утверждении_республиканских_нормативов_градостроительного_проектирования_с_изменениями_на_23_апре.pdf
     fetch_format: pdf
     last_verified: "2026-07-22"
@@ -79,7 +80,7 @@ federal:
     СП 42.13330.2016 "Градостроительство. Планировка и застройка городских
     и сельских поселений" (актуализированная редакция СНиП 2.07.01-89*);
     также 123-ФЗ и СанПиН
-  source_url: ""
+  source_url: https://meganorm.ru/mega_doc/norm/normy/0/sp_42_13330_2016_svod_pravil_gradostroitelstvo_planirovka_i.html
   local_raw_filename: docs/СП 42.pdf
   fetch_format: pdf
   last_verified: "2026-07-22"
