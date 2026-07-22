@@ -15,8 +15,8 @@ psycopg2-binary==2.9.10
 # ML / NLP — прод Bothost: ONNX via fastembed (без PyTorch в runtime RAM)
 fastembed==0.6.1
 scikit-learn==1.6.0
-pandas==2.2.3
 numpy>=1.26,<3.0
+# pandas — только train/eval локально (requirements-dev), не в Bothost-образе
 # chromadb — legacy; на Bothost/Qdrant не ставим (тяжёлый resolver OpenTelemetry).
 # Локально при VECTOR_BACKEND=chroma: pip install -r requirements-legacy-chroma.txt
 # Torch/ST (e5-large и т.п.): pip install -r requirements-enterprise-embeddings.txt
