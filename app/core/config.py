@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = str(BASE_DIR / "data" / "chroma")
     chroma_collection: str = "rngp_requirements"
 
-    # Wave 0+: qdrant primary; chroma — legacy до cutover
+    # qdrant — основной контур; chroma — локальный legacy
     vector_backend: Literal["chroma", "qdrant"] = "chroma"
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "regiobuild_normative"

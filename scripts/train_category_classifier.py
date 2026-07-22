@@ -1,12 +1,12 @@
-"""Обучение классификатора из categories.xlsx (Wave 4).
+"""Обучение классификатора категорий из categories.xlsx.
 
+Запуск (когда файл на месте):
   python -m scripts.train_category_classifier --xlsx path/to/categories.xlsx
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 from loguru import logger
@@ -16,7 +16,7 @@ MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 
 def run(xlsx: Path) -> int:
     if not xlsx.exists():
-        logger.error(f"нет {xlsx} — пришлите categories.xlsx (~500 размеченных пунктов)")
+        logger.error(f"нет {xlsx} — нужен categories.xlsx с размеченными пунктами")
         return 2
     try:
         import pandas as pd

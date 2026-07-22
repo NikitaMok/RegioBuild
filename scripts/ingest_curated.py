@@ -38,16 +38,17 @@ def main() -> None:
 
     try:
         from app.vectorstore.chroma_store import get_chroma_store
-    except ImportError:
+
+        store = get_chroma_store()
+    except ModuleNotFoundError:
         logger.warning(
-            "chromadb не установлен — curated записан в JSONL; "
-            "векторный upsert пропущен (Bothost/Qdrant)"
+            "chromadb не установлен — curated только в JSONL; "
+            "векторный upsert пропущен (контур Qdrant)"
         )
         return
 
     chunks = all_curated_chunks()
     embedder = get_embedder()
-    store = get_chroma_store()
 
     to_add = []
     replaced = 0

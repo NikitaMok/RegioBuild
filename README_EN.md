@@ -2,15 +2,15 @@
 
 [Русская версия (основная)](README.md)
 
-**A project for comparing regional urban-planning design standards (RNGP/TSN)
-of constituent entities of the Russian Federation**, taking into account
-federal regulation (SP 42.13330.2016, excerpts from Federal Law No. 123-FZ of
-22 July 2008, and sanitary rules and norms).
+A service for comparing **regional urban-planning design standards (RNGP/TSN)**
+of constituent entities of the Russian Federation against the federal layer
+(SP 42.13330.2016, excerpts from Federal Law No. 123-FZ of 22 July 2008, and
+sanitary rules and norms).
 
-The Telegram client is a demonstration interface. The architectural core is a
-FastAPI service and a RAG agent (LangGraph): material statements in the answer
-are expected to be grounded in a specific normative clause. The API may be
-deployed independently of the messenger.
+The core is an HTTP API and a LangGraph RAG agent: statements in the answer are
+tied to a specific normative clause, with regional and federal levels kept
+distinct. The Telegram client is a demonstration UI; the same API can be called
+from an external service.
 
 <p align="center">
   <img src="docs/screenshots/01-bot-about.png" alt="RegioBuild — Telegram overview" width="400"/>
@@ -18,36 +18,32 @@ deployed independently of the messenger.
 
 ---
 
-## Purpose
+## Problem
 
-Legal regulation of capital-construction siting across Russian regions is
-highly fragmented: the content and density of regional urban-planning design
-standards differ substantially. Manual comparison of regional acts and federal
-norms is labour-intensive and carries a real risk of omitting material
-requirements.
+Siting rules for capital-construction objects vary widely across Russian
+regions. Comparing regional RNGP texts with federal norms by hand is slow and
+easy to get wrong on material clauses.
 
-RegioBuild produces a **reference overview** stating the clause number and the
-level of regulation (regional / federal). The output does not replace legal
-advice, design documentation, or a professional assessment of whether siting
-is permissible.
+RegioBuild returns a **reference overview** for an object type and one region
+(or two regions in compare mode), with clause numbers and regulation level.
+It is not legal advice and not an opinion on whether a particular plot may be
+developed.
 
 ---
 
-## Current status
+## What is in the repo
 
-The repository includes a demonstration Telegram client, an HTTP API, a vector
-index covering five constituent entities of the Russian Federation, and
-programmatic verification of citations against retrieved corpus fragments. The
-present build is a **working prototype**: broader subject coverage, municipal
-zoning (PZZ), robustness on atypical query wording, and ongoing corpus
-maintenance require further development — including by a team rather than a
-single author.
+- Telegram client (aiogram 3) and FastAPI (`/info`, `/compare`, `/api/v1/*`,
+  `/health`, `/metrics`)
+- PDF corpus (federal layer + RNGP for five regions), hierarchical clause
+  parsing, hybrid retrieval (dense + BM25)
+- Vector store: **Qdrant** (primary); Chroma kept as a local legacy option
+- Citation grounding against retrieved fragments and a numeric guardrail
+- Disclaimer and an explicit refusal when the corpus does not support a claim
 
-Development and testing of the core (ingestion, index, agent, API, evaluation
-runs) were carried out locally for an extended period. Publication of the
-repository and connection of the Telegram client came later; the short public
-git history primarily reflects deployment and the client layer, not the full
-construction of the solution.
+This is a **working prototype**. Municipal zoning (PZZ) is out of scope for the
+current index; coverage by object type and behaviour on rare phrasings are still
+limited.
 
 <p align="center">
   <img src="docs/screenshots/02-bot-start.png" alt="Start: legal status" width="360"/>
@@ -55,31 +51,22 @@ construction of the solution.
   <img src="docs/screenshots/03-bot-rules.png" alt="Rules and disclaimer" width="360"/>
 </p>
 
-**Legal status.** A reference navigator over fragments of normative legal acts;
-it is **not** legal advice and **not** an opinion on whether an object may be
-sited on a particular land plot. Municipal land-use and development rules and
-other local acts may be absent from the index and must be verified separately.
-Details: [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md) (Russian).
+Legal status (Russian): [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
 
 ---
 
-## Capabilities
+## Modes
 
-1. Overview of requirements for a capital-construction object in one
-   constituent entity of the Russian Federation — with regional and federal
-   levels separated.
-2. Comparison of requirements between two entities — differences and overlaps
-   with clause citations.
+1. **Single-region overview** — regional and federal requirements for a
+   capital-construction object.
+2. **Two-region comparison** — differences and overlaps with clause citations.
 
-A clause number proposed by the language model is matched against fragments
-retrieved from the index; where there is no verifiable support, the system
-refrains from inventing a norm.
+Clause numbers proposed by the model are checked against retrieved fragments.
+Unsupported numbers are dropped.
 
 <p align="center">
   <img src="docs/screenshots/04-bot-modes.png" alt="Mode selection" width="360"/>
 </p>
-
-Example answers:
 
 <p align="center">
   <img src="docs/screenshots/05-bot-info-avtomoika-kk.png" alt="Car wash in Krasnodar Krai" width="400"/>
@@ -91,16 +78,17 @@ Example answers:
 
 ---
 
-## Index coverage
+## Corpus coverage
 
-Constituent entities currently represented in the index: Moscow Oblast,
-Krasnodar Krai, Sverdlovsk Oblast, Novosibirsk Oblast, Republic of Tatarstan.
+Regions in the index: Moscow Oblast, Krasnodar Krai, Sverdlovsk Oblast,
+Novosibirsk Oblast, Republic of Tatarstan (ISO 3166-2: `RU-MOS`, `RU-KDA`,
+`RU-SVE`, `RU-NVS`, `RU-TA`). Federal layer: `RU-FED`.
 
-Federal layer: SP 42.13330.2016; curated fragments of Federal Law No. 123-FZ
-and SanPiN for background comparison.
+Municipal Novosibirsk PDFs are listed in the manifest but **not ingested**;
+they are reserved for a later stage.
 
-The index does not claim exhaustive coverage of the object classifier or the
-full set of Russian codes of practice.
+The index does not claim full coverage of Russian codes of practice or the full
+object classifier.
 
 ---
 
@@ -109,19 +97,21 @@ full set of Russian codes of practice.
 | Layer | Components |
 |-------|------------|
 | Language | Python 3.11 |
-| Backend | FastAPI (`/info`, `/compare`, `/health`, `/metrics`) |
+| Backend | FastAPI |
 | Client | aiogram 3 |
 | Orchestration | LangGraph |
-| Retrieval | sentence-transformers (multilingual MiniLM), Chroma |
+| Embeddings | sentence-transformers (multilingual MiniLM; optional e5-large) |
+| Vector DB | Qdrant (primary), Chroma (legacy) |
 | Classification | scikit-learn (TF-IDF + LogisticRegression) |
-| LLM | GigaChat (production); YandexGPT also in code |
-| Data | SQLAlchemy, Alembic, disk LLM response cache |
+| LLM | GigaChat Pro (production); YandexGPT present in code, failover off by default |
+| Data | SQLAlchemy, Alembic, disk LLM cache |
 | Quality | pytest; Recall@k, MRR |
 | Infrastructure | Docker, GitHub Actions, Prometheus, Sentry |
 
 Single Docker image; process role via `SERVICE_ROLE=api|bot`.
 
-Pipeline description: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Russian).
+Pipeline: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Russian).  
+Deploy notes: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md) (Russian).
 
 ---
 
@@ -129,27 +119,13 @@ Pipeline description: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Russian).
 
 ```
 RegioBuild/
-  app/
-    agent/         # LangGraph
-    api/           # FastAPI
-    bot/           # Telegram client
-    classifier/
-    core/
-    db/
-    embeddings/
-    eval/
-    ingestion/
-    llm/
-    vectorstore/
-  config/          # regions.yaml
+  app/           # agent, api, bot, ingestion, vectorstore, llm
+  config/        # regions.yaml, documents.yaml, object_categories.yaml
   docs/
   migrations/
   scripts/
   tests/
-  data/
-    curated/
-    chroma/
-    raw/ processed/  # local, not in git
+  data/          # curated; raw/processed/structured — local
   Dockerfile
 ```
 
@@ -164,36 +140,33 @@ pip install -r requirements.txt
 copy .env.example .env         # Linux/Mac: cp .env.example .env
 ```
 
-LLM credentials and the bot token go in `.env`:
+Put GigaChat credentials (and bot token if needed) in `.env`, plus Qdrant
+settings (`VECTOR_BACKEND=qdrant`). For local Chroma:
+`pip install -r requirements-legacy-chroma.txt`.
 
 ```bash
 alembic upgrade head
-python -m app.ingestion.pipeline
-python -m app.embeddings.build_index
-python -m app.classifier.train
-python -m scripts.ingest_curated
+python -m scripts.parse_pdf_docs
+python -m scripts.index_qdrant
 
 uvicorn app.api.main:app --reload
 python -m app.bot.main
 ```
 
-Alternatively: `docker compose up --build`. Postgres variant:
-`docker-compose.postgres.yml`. Deployment notes:
-[`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md) (Russian).
+Or `docker compose up --build`. Postgres: `docker-compose.postgres.yml`.
 
 ---
 
-## Testing
+## Tests
 
 ```bash
 pytest
 python -m app.eval.retrieval_eval
 python -m app.eval.answer_eval
-python -m scripts.audit_corpus
 ```
 
-Continuous integration (GitHub Actions) runs a reduced suite without
-torch/chroma. Post-deployment smoke: `scripts/smoke_wave1_prod.py`.
+CI runs a reduced suite without torch. Post-deploy smoke:
+`python -m scripts.smoke_wave1_prod --api-url https://…`.
 
 ---
 
@@ -210,7 +183,6 @@ Nikita Mokin
 © Nikita Mokin. **All rights reserved.**
 
 Copying the repository, reproducing substantial parts of the solution, and
-using the code or product for commercial purposes **without the prior written
-consent of the rights holder is prohibited**. Sources published on GitHub are
-intended for review and demonstration of competence and do not constitute an
-open-source licence for commercial exploitation.
+using the code or product commercially **without prior written consent of the
+rights holder is prohibited**. Sources on GitHub are for review and portfolio
+demonstration and do not grant a commercial licence.
