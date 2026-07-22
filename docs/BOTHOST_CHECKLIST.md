@@ -33,6 +33,7 @@ Embeddings на Bothost: **fastembed (ONNX)**, без PyTorch. В образе `
 | `SENTRY_DSN` | если нужен алертинг ошибок |
 | `LLM_CACHE_ENABLED` | `true` |
 | `LOG_JSON` | по желанию `true` для разбора логов |
+| `API_AUTH_ENABLED` | `true` — X-API-Key на `/api/v1` (ключи: `python -m scripts.manage_api_keys create`); legacy `/info`,`/compare` для бота открыты |
 
 Проверки после старта:
 

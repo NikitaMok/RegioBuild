@@ -42,7 +42,7 @@ from app.vectorstore.types import RetrievedChunk
 from app.core.object_categories import categories_for_object, query_phrases_for_object
 from app.vectorstore.retriever import hybrid_retrieve as retrieve
 
-TOP_K_PER_QUERY = 3
+TOP_K_PER_QUERY = 4
 MAX_CHUNKS_PER_REGION = 8
 MAX_FEDERAL_CHUNKS = 6
 

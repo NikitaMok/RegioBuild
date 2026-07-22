@@ -105,8 +105,23 @@ write к публичному Bothost-API завершает связку Cloud 
 
 ### Качество
 
-Recall@k и MRR — для retrieval. Pytest в CI (облегчённый прогон без torch).
-Smoke после выкладки — проверка, что контур жив, без ручного «тыканья» вслепую.
+Качество retrieval измеряется, а не оценивается на глаз: golden-набор
+(`data/eval/golden.jsonl`) с ожидаемыми пунктами НПА по каждому региону и
+`python -m scripts.eval_golden` (метрика — попадание ожидаемых пунктов в
+retrieval-контекст агента). Текущий прогон по корпусу:
+
+| Регион | Hit rate |
+|--------|----------|
+| RU-KDA | 4/5 |
+| RU-MOS | 2/3 |
+| RU-NVS | 3/3 |
+| RU-SVE | 2/2 |
+| RU-TA | 3/3 |
+| RU-FED | 2/4 |
+| **Итого** | **16/20 = 80%** |
+
+Pytest в CI (облегчённый прогон без torch). Smoke после выкладки — проверка,
+что контур жив, без ручного «тыканья» вслепую.
 
 Архитектура: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).  
 Выкладка: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
@@ -135,6 +150,64 @@ Smoke после выкладки — проверка, что контур жи
 <p align="center">
   <img src="docs/screenshots/06-bot-compare-sklad-rt-mo.png" alt="Сравнение склада: Татарстан и Московская область" width="400"/>
 </p>
+
+---
+
+## Интеграция (API v1)
+
+Коммерческий контур — `/api/v1` с аутентификацией по `X-API-Key` и
+машиночитаемым ответом: каждое требование привязано к пункту НПА, уровню
+регулирования (региональный/федеральный) и дате сверки документа с
+первоисточником. Интерактивная спецификация — `GET /docs` (OpenAPI).
+
+Выпуск ключа клиенту (на сервере):
+
+```bash
+python -m scripts.manage_api_keys create --name "ООО Клиент" --daily-limit 200
+```
+
+Запрос:
+
+```bash
+curl -X POST https://<host>/api/v1/info \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: rgb_…" \
+  -d '{"region": "RU-KDA", "object_type": "автомойка"}'
+```
+
+Ответ (сокращённо):
+
+```json
+{
+  "region": "RU-KDA",
+  "object_type": "автомойка",
+  "guardrail_blocked": false,
+  "requirements": [
+    {
+      "category": "градостроительные",
+      "description": "Для автомоек принимается 1 машино-место на 1 бокс.",
+      "is_specific": true,
+      "citation": {
+        "document": "Постановление №78",
+        "clause": "табл.108",
+        "region": "RU-KDA",
+        "level": "regional",
+        "last_verified": "2026-07-22"
+      }
+    }
+  ],
+  "sources": [
+    {"region": "RU-KDA", "title": "…", "url": "https://…", "last_verified": "2026-07-22"}
+  ]
+}
+```
+
+`/api/v1/compare` дополнительно возвращает `differences` (значения по двум
+регионам с отдельными цитатами) и `common_requirements`. Пример клиента —
+[`examples/api_client.py`](examples/api_client.py).
+
+Масштабирование на новые субъекты РФ — процедура без изменения кода:
+[`docs/ADDING_REGION.md`](docs/ADDING_REGION.md).
 
 ---
 

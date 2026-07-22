@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -48,6 +48,20 @@ class Chunk(Base):
     document: Mapped["Document"] = relationship(back_populates="chunks")
 
 
+class ApiKey(Base):
+    """Ключ клиента для коммерческого контура /api/v1."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    client_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    daily_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)  # None → дефолт
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class QueryLog(Base):
     """Лог запросов и фидбека."""
 
@@ -62,6 +76,7 @@ class QueryLog(Base):
     answer: Mapped[str] = mapped_column(Text, nullable=True)
     feedback: Mapped[str] = mapped_column(String(8), nullable=True)  # "up" | "down" | None
     telegram_user_id: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    api_key_id: Mapped[str] = mapped_column(String(36), nullable=True, index=True)
     client_ip: Mapped[str] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str] = mapped_column(String(256), nullable=True)
     error_text: Mapped[str] = mapped_column(Text, nullable=True)

@@ -130,7 +130,7 @@ class CachingLLMProvider(LLMProvider):
         self,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.2,
+        temperature: float = 0.0,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> str:
         key = _cache_key(system_prompt, user_prompt, temperature, max_tokens)

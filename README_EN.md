@@ -106,8 +106,14 @@ Alloy remote write to the public Bothost API completes the Cloud ↔ runtime lin
 
 ### Quality
 
-Recall@k and MRR for retrieval. Pytest in CI (light suite without torch).
-Post-deploy smoke checks that the contour is alive.
+Retrieval quality is measured, not eyeballed: a golden set
+(`data/eval/golden.jsonl`) with expected clause anchors per region and
+`python -m scripts.eval_golden` (metric — expected clauses hitting the agent's
+retrieval context). Current run: **16/20 = 80% hit rate** (RU-NVS, RU-SVE,
+RU-TA at 100%; weakest — federal-only cases).
+
+Pytest in CI (light suite without torch). Post-deploy smoke checks that the
+contour is alive.
 
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).  
 Deployment: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
@@ -136,6 +142,32 @@ Deployment: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
 <p align="center">
   <img src="docs/screenshots/06-bot-compare-sklad-rt-mo.png" alt="Warehouse compare: Tatarstan vs Moscow Oblast" width="400"/>
 </p>
+
+---
+
+## Integration (API v1)
+
+The commercial surface is `/api/v1` with `X-API-Key` authentication and a
+machine-readable response: every requirement is tied to a clause, a regulatory
+level (regional/federal) and the source-verification date. Interactive spec —
+`GET /docs` (OpenAPI).
+
+```bash
+# issue a client key (server side)
+python -m scripts.manage_api_keys create --name "Client LLC" --daily-limit 200
+
+curl -X POST https://<host>/api/v1/info \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: rgb_…" \
+  -d '{"region": "RU-KDA", "object_type": "автомойка"}'
+```
+
+`/api/v1/compare` additionally returns `differences` (per-region values with
+separate citations) and `common_requirements`. Client example —
+[`examples/api_client.py`](examples/api_client.py).
+
+Scaling to new regions is a data-and-config procedure, no code changes:
+[`docs/ADDING_REGION.md`](docs/ADDING_REGION.md).
 
 ---
 

@@ -1,0 +1,20 @@
+{"id": "kda-carwash", "object_type": "автомойка", "region": "RU-KDA", "expected_sections_any": ["табл.108", "5.5.153", "4.3.20", "5.5.161"], "comment": "парковка по табл.108, участки СТО"}
+{"id": "kda-azs", "object_type": "азс", "region": "RU-KDA", "expected_sections_any": ["5.5.163", "СанПиН/7.1.5"], "comment": "колонки и участки АЗС + СЗЗ"}
+{"id": "kda-mall", "object_type": "торговый центр", "region": "RU-KDA", "expected_sections_any": ["табл.108", "5.5.153"], "comment": "машино-места на 40 м²"}
+{"id": "kda-service", "object_type": "автосервис", "region": "RU-KDA", "expected_sections_any": ["5.5.161", "табл.108", "4.3.20"], "comment": "посты СТО и парковка"}
+{"id": "kda-cafe", "object_type": "кафе", "region": "RU-KDA", "expected_sections_any": ["табл.108", "СанПиН/7.1.6"], "comment": "1 место на 5 посадочных"}
+{"id": "ta-carwash", "object_type": "автомойка", "region": "RU-TA", "expected_sections_any": ["5.2.258", "5.2.257", "СанПиН/7.1.3"], "comment": "СЗЗ моек 50/100 м"}
+{"id": "ta-azs", "object_type": "азс", "region": "RU-TA", "expected_sections_any": ["5.2.256", "СанПиН/7.1.5"], "comment": "СЗЗ АЗС"}
+{"id": "ta-warehouse", "object_type": "склад", "region": "RU-TA", "expected_sections_any": ["4.4.58", "СанПиН/7.1.4"], "comment": "СЗЗ коммунально-складских"}
+{"id": "mos-warehouse", "object_type": "склад", "region": "RU-MOS", "expected_sections_any": ["прил.10", "МО-доп/склад", "5.26", "СанПиН/7.1.4"], "comment": "стоянки прил.10, инфраструктура 5.26"}
+{"id": "mos-mall", "object_type": "торговый центр", "region": "RU-MOS", "expected_sections_any": ["МО-доп/парковка-тц", "табл.108"], "comment": "парковка ТЦ"}
+{"id": "mos-hotel", "object_type": "гостиница", "region": "RU-MOS", "expected_sections_any": ["5.26", "СанПиН/7.1.6"], "comment": "инфраструктура комплексов"}
+{"id": "sve-warehouse", "object_type": "склад", "region": "RU-SVE", "expected_sections_any": ["СО-доп/склад", "СанПиН/7.1.4", "123-ФЗ/69"], "comment": "федеральный фон при слабом регионе"}
+{"id": "sve-carwash", "object_type": "автомойка", "region": "RU-SVE", "expected_sections_any": ["СО-доп/автомойка", "СанПиН/7.1.3"], "comment": "СЗЗ моек"}
+{"id": "nvs-carwash", "object_type": "автомойка", "region": "RU-NVS", "expected_sections_any": ["НО-доп/автомойка", "СанПиН/7.1.3"], "comment": "СЗЗ моек"}
+{"id": "nvs-warehouse", "object_type": "склад", "region": "RU-NVS", "expected_sections_any": ["НО-доп/склад", "123-ФЗ/88", "СанПиН/7.1.4"], "comment": "пожарные требования складов"}
+{"id": "nvs-mall", "object_type": "торговый центр", "region": "RU-NVS", "expected_sections_any": ["НО-доп/тц", "НО-доп/1"], "comment": "показатели обеспеченности"}
+{"id": "fed-warehouse", "object_type": "склад", "region": "RU-FED", "expected_sections_any": ["123-ФЗ/69", "123-ФЗ/88", "СанПиН/7.1.4"], "comment": "чисто федеральный слой"}
+{"id": "fed-azs", "object_type": "азс", "region": "RU-FED", "expected_sections_any": ["123-ФЗ/azs", "СанПиН/7.1.5"], "comment": "АЗС как объект повышенной опасности"}
+{"id": "fed-medcenter", "object_type": "медицинский центр", "region": "RU-FED", "expected_sections_any": ["СанПиН/7.1.7", "123-ФЗ/27"], "comment": "размещение ЛПУ"}
+{"id": "fed-mall", "object_type": "торговый центр", "region": "RU-FED", "expected_sections_any": ["123-ФЗ/27", "123-ФЗ/80", "СанПиН/7.1.6"], "comment": "класс Ф3, эвакуация"}
