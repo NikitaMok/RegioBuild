@@ -1,0 +1,42 @@
+# Маппинг типа объекта → оси сравнения / multi-query categories (DeepSeek).
+# Англ. коды стабильны для retrieval; UI-категории агента остаются русскими.
+
+defaults:
+  - parking
+  - fire
+  - sanitary
+  - setback
+  - accessibility
+  - general
+
+objects:
+  автомойка: [parking, sanitary, fire, setback]
+  автосервис: [parking, fire, sanitary, setback]
+  азс: [fire, sanitary, setback, parking]
+  автозаправка: [fire, sanitary, setback, parking]
+  склад: [sanitary, fire, parking, setback]
+  складской комплекс: [sanitary, fire, parking]
+  торговый центр: [parking, fire, accessibility, sanitary]
+  тц: [parking, fire, accessibility]
+  магазин: [parking, fire, accessibility]
+  офис: [parking, height, setback, fire, accessibility]
+  офисное здание: [parking, height, setback, fire, accessibility]
+  кафе: [parking, sanitary, fire, accessibility]
+  ресторан: [parking, sanitary, fire]
+  гостиница: [parking, fire, sanitary, accessibility]
+  отель: [parking, fire, sanitary]
+  медицинский центр: [parking, sanitary, fire, accessibility]
+  медцентр: [parking, sanitary, fire]
+  производство: [fire, sanitary, setback, parking]
+  цех: [fire, sanitary, setback]
+  завод: [fire, sanitary, setback]
+
+category_queries:
+  parking: "парковка машино-места стоянка"
+  height: "высота этажность"
+  setback: "отступ разрыв расстояние до границ"
+  sanitary: "санитарно-защитная зона СанПиН"
+  fire: "пожарная безопасность противопожарные расстояния 123-ФЗ"
+  accessibility: "пешеходная доступность подходы"
+  landscaping: "озеленение благоустройство"
+  general: "размещение требования"

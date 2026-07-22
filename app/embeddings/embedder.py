@@ -41,10 +41,27 @@ class Embedder:
             convert_to_numpy=True,
         )
 
-    def encode_one(self, text: str) -> np.ndarray:
+    def _is_e5(self) -> bool:
+        return "e5" in (self.model_name or "").lower()
+
+    def encode_passages(self, texts: list[str], batch_size: int = 32, show_progress: bool = False) -> np.ndarray:
+        if self._is_e5():
+            texts = [f"passage: {t}" for t in texts]
+        return self.encode(texts, batch_size=batch_size, show_progress=show_progress)
+
+    def encode_query(self, text: str) -> np.ndarray:
+        if self._is_e5():
+            text = f"query: {text}"
         return self.encode([text])[0]
+
+    def encode_one(self, text: str) -> np.ndarray:
+        return self.encode_query(text)
 
 
 @lru_cache
 def get_embedder() -> Embedder:
-    return Embedder()
+    settings = get_settings()
+    model = settings.embedding_model_name
+    if settings.deploy_profile == "enterprise":
+        model = settings.embedding_model_enterprise
+    return Embedder(model_name=model)

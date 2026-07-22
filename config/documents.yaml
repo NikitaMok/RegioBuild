@@ -1,0 +1,184 @@
+# Манифест PDF в data/raw/docs/.
+# ingest: true — парсим и индексируем (federal + regional).
+# ingest: false — municipal «на будущее», не трогать.
+
+documents:
+  # --- Federal (RU-FED) ---
+  - id: RU-FED_GRK_2004
+    filename: "Градостроительный кодекс Российской Федерации  от 29.12.2004.pdf"
+    region_iso: RU-FED
+    regulatory_level: federal
+    doc_type: GRK
+    doc_name: "Градостроительный кодекс Российской Федерации от 29.12.2004"
+    doc_version: "2004-12-29"
+    is_active: true
+    ingest: true
+
+  - id: RU-FED_SP42_2016
+    filename: "СП 42.pdf"
+    region_iso: RU-FED
+    regulatory_level: federal
+    doc_type: SP
+    doc_name: "СП 42.13330.2016 Градостроительство. Планировка и застройка"
+    doc_version: "2016"
+    is_active: true
+    ingest: true
+
+  - id: RU-FED_FZ123_2025
+    filename: "Федеральный закон от 22.07.2008 N 123-ФЗ (ред. от 31.07.2025.pdf"
+    region_iso: RU-FED
+    regulatory_level: federal
+    doc_type: FZ
+    doc_name: "Федеральный закон от 22.07.2008 № 123-ФЗ (ред. от 31.07.2025)"
+    doc_version: "2025-07-31"
+    is_active: true
+    ingest: true
+
+  - id: RU-FED_SANPIN
+    filename: "Постановление Главного государственного санитарного врача РФ.pdf"
+    region_iso: RU-FED
+    regulatory_level: federal
+    doc_type: SANPIN
+    doc_name: "Постановление Главного государственного санитарного врача РФ (СанПиН)"
+    doc_version: "unknown"
+    is_active: true
+    ingest: true
+
+  # --- Regional RNGP ---
+  - id: RU-MOS_RNGP
+    filename: "Об_утверждении_нормативов_градостроительного_проектирования_Московской_области_с_изменениями_на_2_ию.pdf"
+    region_iso: RU-MOS
+    regulatory_level: regional
+    doc_type: RNGP
+    doc_name: "Нормативы градостроительного проектирования Московской области"
+    doc_version: "2026-07-22"
+    is_active: true
+    ingest: true
+
+  - id: RU-KDA_RNGP
+    filename: "Об_утверждении_нормативов_градостроительного_проектирования_Краснодарского_края_с_изменениями_на_11_.pdf"
+    region_iso: RU-KDA
+    regulatory_level: regional
+    doc_type: RNGP
+    doc_name: "Нормативы градостроительного проектирования Краснодарского края"
+    doc_version: "2026-07-22"
+    is_active: true
+    ingest: true
+
+  - id: RU-SVE_RNGP
+    filename: "Об_утверждении_региональных_нормативов_градостроительного_проектирования_Свердловской_области.pdf"
+    region_iso: RU-SVE
+    regulatory_level: regional
+    doc_type: RNGP
+    doc_name: "Региональные нормативы градостроительного проектирования Свердловской области"
+    doc_version: "2026-07-22"
+    is_active: true
+    ingest: true
+
+  - id: RU-NVS_RNGP
+    filename: "Об_утверждении_региональных_нормативов_градостроительного_проектирования_Новосибирской_области_с_изм.pdf"
+    region_iso: RU-NVS
+    regulatory_level: regional
+    doc_type: RNGP
+    doc_name: "Региональные нормативы градостроительного проектирования Новосибирской области"
+    doc_version: "2026-07-22"
+    is_active: true
+    ingest: true
+
+  - id: RU-TA_RNGP
+    filename: "Об_утверждении_республиканских_нормативов_градостроительного_проектирования_с_изменениями_на_23_апре.pdf"
+    region_iso: RU-TA
+    regulatory_level: regional
+    doc_type: RNGP
+    doc_name: "Республиканские нормативы градостроительного проектирования Республики Татарстан"
+    doc_version: "2026-07-22"
+    is_active: true
+    ingest: true
+
+  # --- Regional laws (subject level, not municipal) ---
+  - id: RU-TA_LAW_GRAD
+    filename: "О_градостроительной_деятельности_в_Республике_Татарстан_с_изменениями_на_10_апреля_2025_года.pdf"
+    region_iso: RU-TA
+    regulatory_level: regional
+    doc_type: regional_law
+    doc_name: "О градостроительной деятельности в Республике Татарстан"
+    doc_version: "2025-04-10"
+    is_active: true
+    ingest: true
+
+  - id: RU-NVS_LAW_GRAD
+    filename: "О_регулировании_градостроительной_деятельности_в_Новосибирской_области_с_изменениями_на_23_декабря_2.pdf"
+    region_iso: RU-NVS
+    regulatory_level: regional
+    doc_type: regional_law
+    doc_name: "О регулировании градостроительной деятельности в Новосибирской области"
+    doc_version: "unknown"
+    is_active: true
+    ingest: true
+
+  # --- Municipal deferred (do not ingest) ---
+  - id: RU-NVS_LOCAL_NSK_CITY
+    filename: "О_Местных_нормативах_градостроительного_проектирования_города_Новосибирска_с_изменениями_на_21_декаб.pdf"
+    region_iso: RU-NVS
+    regulatory_level: municipal
+    doc_type: local_NGP
+    doc_name: "Местные нормативы градостроительного проектирования города Новосибирска"
+    doc_version: "deferred"
+    is_active: false
+    ingest: false
+    scope: deferred
+
+  - id: RU-NVS_LOCAL_NSK_ORDER
+    filename: "О_Порядке_подготовки,_утверждения_местных_нормативов_градостроительного_проектирования_города_Новоси.pdf"
+    region_iso: RU-NVS
+    regulatory_level: municipal
+    doc_type: local_NGP
+    doc_name: "Порядок подготовки местных нормативов г. Новосибирска"
+    doc_version: "deferred"
+    is_active: false
+    ingest: false
+    scope: deferred
+
+  - id: RU-NVS_LOCAL_GO_1
+    filename: "Об_утверждении_местных_нормативов_градостроительного_проектирования_муниципального_образования_Город (1).pdf"
+    region_iso: RU-NVS
+    regulatory_level: municipal
+    doc_type: local_NGP
+    doc_name: "Местные НГП муниципального образования (Город) (1)"
+    doc_version: "deferred"
+    is_active: false
+    ingest: false
+    scope: deferred
+
+  - id: RU-NVS_LOCAL_GO_2
+    filename: "Об_утверждении_местных_нормативов_градостроительного_проектирования_муниципального_образования_город.pdf"
+    region_iso: RU-NVS
+    regulatory_level: municipal
+    doc_type: local_NGP
+    doc_name: "Местные НГП муниципального образования (город)"
+    doc_version: "deferred"
+    is_active: false
+    ingest: false
+    scope: deferred
+
+  - id: RU-NVS_LOCAL_DISTRICT
+    filename: "Об_утверждении_местных_нормативов_градостроительного_проектирования_Новосибирского_района_Новосибирс.pdf"
+    region_iso: RU-NVS
+    regulatory_level: municipal
+    doc_type: local_NGP
+    doc_name: "Местные НГП Новосибирского района"
+    doc_version: "deferred"
+    is_active: false
+    ingest: false
+    scope: deferred
+
+  - id: RU-NVS_LOCAL_URBAN_OKRUG
+    filename: "Об_утверждении_Нормативов_градостроительного_проектирования_городского_округа_-_муниципального_образ.pdf"
+    region_iso: RU-NVS
+    regulatory_level: municipal
+    doc_type: local_NGP
+    doc_name: "НГП городского округа — муниципального образования"
+    doc_version: "deferred"
+    is_active: false
+    ingest: false
+    scope: deferred

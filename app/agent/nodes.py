@@ -38,7 +38,8 @@ from app.llm.prompts import (
 )
 from app.llm.schemas import CommonRequirementItem, ComparisonResult, ExtractionResult, RequirementItem
 from app.vectorstore.types import RetrievedChunk
-from app.vectorstore.retriever import retrieve
+from app.core.object_categories import categories_for_object, query_phrases_for_object
+from app.vectorstore.retriever import hybrid_retrieve as retrieve
 
 TOP_K_PER_QUERY = 3
 MAX_CHUNKS_PER_REGION = 8
@@ -50,6 +51,12 @@ _RETRIEVAL_QUERY_TEMPLATES: tuple[str, ...] = (
     "{bt} размещение парковка машино-места",
     "{bt} санитарно-защитная зона СанПиН",
 )
+
+
+def _retrieval_queries(business_type: str) -> list[str]:
+    phrases = query_phrases_for_object(business_type)
+    # не больше 5 запросов — баланс recall/latency
+    return phrases[:5] or [t.format(bt=business_type) for t in _RETRIEVAL_QUERY_TEMPLATES]
 
 # короткие маркеры регионов больше не используем в UI — тематические эмодзи
 _COMPARE_SIDE_EMOJI_A = "🔹"
@@ -172,7 +179,62 @@ def understand_query(state: AgentState) -> AgentState:
         return {**state, "error": "Не указан регион."}
     if state.get("mode") == "compare" and not state.get("region_b"):
         return {**state, "error": "Для режима сравнения нужно указать два региона."}
-    return {**state, "business_type": business_type}
+
+    cats = categories_for_object(business_type)
+    return {
+        **state,
+        "business_type": business_type,
+        "categories": cats,
+        "transformed_query": state.get("transformed_query") or business_type,
+    }
+
+
+def query_transform(state: AgentState) -> AgentState:
+    """Сленг/длинная фраза → канонический поисковый запрос (лёгкий LLM или без него)."""
+    if state.get("error"):
+        return state
+    business_type = state.get("business_type") or ""
+    raw = state.get("business_type_raw") or business_type
+    # если уже извлекли короткий тип — transformation = тип + ключевые категории
+    cats = state.get("categories") or categories_for_object(business_type)
+    transformed = f"{business_type} " + " ".join(cats[:3])
+    if len((raw or "").split()) <= 4:
+        return {**state, "transformed_query": transformed.strip(), "categories": cats}
+
+    try:
+        provider = get_llm_provider()
+        prompt = (
+            "Переформулируй запрос проектировщика на официальный язык строительных нормативов РФ. "
+            "Ответ — одна строка, без кавычек.\n"
+            f"Запрос: {raw}"
+        )
+        out = provider.complete(
+            "Ты нормализуешь поисковые запросы к НПА РФ.",
+            prompt,
+            max_tokens=64,
+            temperature=0.0,
+        )
+        text = (out or "").strip().strip("«»\"'")
+        if text:
+            return {**state, "transformed_query": text, "categories": cats}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"query_transform fallback: {exc}")
+    return {**state, "transformed_query": transformed.strip(), "categories": cats}
+
+
+def rerank_retrieved(state: AgentState) -> AgentState:
+    if state.get("error"):
+        return state
+    from app.agent.rerank import rerank_chunks
+
+    query = state.get("transformed_query") or state.get("business_type") or ""
+    new_state = {**state}
+    for key in ("retrieved_a", "retrieved_b", "retrieved_federal"):
+        chunks = list(state.get(key) or [])
+        if chunks:
+            # top-3 для LLM после hybrid top-N
+            new_state[key] = rerank_chunks(query, chunks, top_n=min(3, len(chunks)))
+    return new_state
 
 
 def _chunk_mentions_business(chunk: RetrievedChunk, business_type: str) -> bool:
@@ -242,11 +304,10 @@ def _retrieve_for_region(
     *,
     max_chunks: int = MAX_CHUNKS_PER_REGION,
 ) -> list[RetrievedChunk]:
-    """Сфокусированный retrieval: мало запросов, жёсткий лимит чанков для LLM."""
+    """Сфокусированный retrieval: multi-query по категориям + hybrid dense/BM25."""
     found: dict[str, RetrievedChunk] = {}
 
-    for template in _RETRIEVAL_QUERY_TEMPLATES:
-        query = template.format(bt=business_type)
+    for query in _retrieval_queries(business_type):
         for chunk in retrieve(query, region_code=region_code, top_k=TOP_K_PER_QUERY):
             prev = found.get(chunk.id)
             if prev is None or chunk.distance < prev.distance:
@@ -257,7 +318,6 @@ def _retrieve_for_region(
     rest = [c for c in chunks if c.id not in {m.id for m in mentioned}]
 
     def _sort_key(chunk: RetrievedChunk) -> tuple[int, float]:
-        # качество секции важнее сырого distance: иначе табл.«1» с «автомойки» убивает 5.5.153
         return (-_section_rank_quality(chunk.section_number), chunk.distance)
 
     mentioned.sort(key=_sort_key)
@@ -897,10 +957,30 @@ def format_response(state: AgentState) -> AgentState:
 
     if state["mode"] == "info" and state.get("extraction"):
         body = _render_extraction(state["extraction"])
-        return {**state, "response_text": prefix + body + DISCLAIMER_TEXT}
-
-    if state["mode"] == "compare" and state.get("comparison"):
+    elif state["mode"] == "compare" and state.get("comparison"):
         body = _render_comparison(state["comparison"])
-        return {**state, "response_text": prefix + body + DISCLAIMER_TEXT}
+    else:
+        return {**state, "response_text": "Не удалось сформировать ответ по имеющимся данным."}
 
-    return {**state, "response_text": "Не удалось сформировать ответ по имеющимся данным."}
+    from app.agent.guardrail import build_refusal, claim_numbers_supported
+
+    context_chunks = (
+        list(state.get("retrieved_a") or [])
+        + list(state.get("retrieved_b") or [])
+        + list(state.get("retrieved_federal") or [])
+    )
+    # для проверки берём plain text без html-тегов
+    plain = re.sub(r"<[^>]+>", "", body)
+    if context_chunks and not claim_numbers_supported(plain, context_chunks):
+        logger.warning("guardrail заблокировал ответ")
+        return {
+            **state,
+            "guardrail_blocked": True,
+            "response_text": prefix + build_refusal(context_chunks) + DISCLAIMER_TEXT,
+        }
+
+    return {
+        **state,
+        "guardrail_blocked": False,
+        "response_text": prefix + body + DISCLAIMER_TEXT,
+    }

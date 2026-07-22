@@ -23,10 +23,24 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = str(BASE_DIR / "data" / "chroma")
     chroma_collection: str = "rngp_requirements"
 
-    # MiniLM: mpnet на ~1 ГБ RAM (Bothost Basic) не влезал
+    # Wave 0+: qdrant primary; chroma — legacy до cutover
+    vector_backend: Literal["chroma", "qdrant"] = "chroma"
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection: str = "regiobuild_normative"
+    qdrant_api_key: str = ""
+
+    # e5-large — enterprise; MiniLM — bothost-demo / legacy
     embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    embedding_model_enterprise: str = "intfloat/multilingual-e5-large"
+    deploy_profile: Literal["bothost-demo", "enterprise"] = "bothost-demo"
+
+    # Grafana Cloud (remote_write) — секреты только в .env
+    grafana_cloud_prometheus_url: str = ""
+    grafana_cloud_prometheus_user: str = ""
+    grafana_cloud_prometheus_token: str = ""
 
     llm_provider: Literal["gigachat", "yandexgpt"] = "gigachat"
+    llm_light_provider: Literal["gigachat", "yandexgpt", "local"] = "gigachat"
 
     gigachat_credentials: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"

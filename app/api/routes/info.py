@@ -10,14 +10,18 @@ from app.api.query_logging import log_query
 from app.api.rate_limit import RateLimitExceeded, ensure_within_daily_limit
 from app.api.schemas import AgentResponse, InfoRequest
 from app.core.business_type import MAX_QUERY_LENGTH, looks_like_prompt_injection
-from app.core.regions import REGIONS
+from app.core.regions import REGIONS, resolve_region_code
 
 router = APIRouter(tags=["info"])
 
 
 @router.post("/info", response_model=AgentResponse)
 def get_business_requirements(payload: InfoRequest, request: Request) -> AgentResponse:
-    if payload.region_code not in REGIONS:
+    try:
+        region_code = resolve_region_code(payload.region_code)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if region_code not in REGIONS:
         raise HTTPException(status_code=422, detail=f"неизвестный регион: {payload.region_code}")
     if len(payload.business_type) > MAX_QUERY_LENGTH:
         raise HTTPException(status_code=422, detail="слишком длинный тип бизнеса")
@@ -36,7 +40,7 @@ def get_business_requirements(payload: InfoRequest, request: Request) -> AgentRe
     try:
         from app.agent.graph import run_info_query
 
-        agent_state = run_info_query(payload.business_type, payload.region_code)
+        agent_state = run_info_query(payload.business_type, region_code)
     except Exception as exc:
         logger.exception("агент упал с необработанным исключением")
         raise HTTPException(status_code=500, detail=f"внутренняя ошибка агента: {exc}") from exc
@@ -47,7 +51,7 @@ def get_business_requirements(payload: InfoRequest, request: Request) -> AgentRe
 
     query_log_id = log_query(
         mode="info",
-        region_a=payload.region_code,
+        region_a=region_code,
         business_type=payload.business_type,
         response_text=response_text,
         telegram_user_id=payload.telegram_user_id,

@@ -41,9 +41,14 @@
 
 Истина в логе: `starting telegram bot, API_BASE_URL=...`
 
-## Не делать на этом этапе
+## Метрики и Grafana Cloud
 
-- JWT / OTel / Redis на Bothost
-- Автодеплой webhook
-- Одновременный recreate API+bot без проверки `/health`
-- Диагностика «пустых ответов» через recreate обоих — сначала квота GigaChat и логи retrieval
+- API отдаёт `GET /metrics` (Prometheus), в т.ч. `regiobuild_guardrail_blocks_total`.
+- Подключение к Grafana Cloud: см. [`docs/GRAFANA.md`](GRAFANA.md).
+- Токены Cloud только в env, не в git.
+
+## Qdrant (enterprise)
+
+Локально: `docker compose --profile enterprise up -d qdrant`, затем
+`VECTOR_BACKEND=qdrant` и `python -m scripts.index_qdrant`.
+На Bothost 2 GB — профиль `bothost-demo` с Chroma до выделения ресурсов под Qdrant.
