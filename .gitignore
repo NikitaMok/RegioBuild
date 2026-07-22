@@ -24,6 +24,10 @@ data/processed/*
 data/backups/
 !data/curated/
 !data/curated/**
+data/structured/*
+!data/structured/.gitkeep
+!data/structured/_summary.json
+data/raw/docs_list.txt
 
 # DB
 *.db
@@ -44,8 +48,8 @@ Thumbs.db
 *.log
 logs/
 
-# Jupyter
-.ipynb_checkpoints/
+models/
+!models/.gitkeep
 
 # chroma + классификатор коммитим: на Bothost пересобирать индекс тяжело,
 # локально переиндексировал — закоммитил. ! ниже перебивает *.sqlite3 выше.

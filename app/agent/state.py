@@ -12,13 +12,16 @@ class AgentState(TypedDict, total=False):
     business_type_raw: Optional[str]
     region_a: str
     region_b: Optional[str]
+    transformed_query: Optional[str]
+    categories: list[str]
 
     retrieved_a: list[RetrievedChunk]
     retrieved_b: list[RetrievedChunk]
-    retrieved_federal: list[RetrievedChunk]  # СП 42.13330.2016
+    retrieved_federal: list[RetrievedChunk]
 
     extraction: Optional[ExtractionResult]
     comparison: Optional[ComparisonResult]
 
     response_text: str
     error: Optional[str]
+    guardrail_blocked: bool

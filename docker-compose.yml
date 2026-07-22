@@ -1,6 +1,16 @@
 # Локально: api + bot на SQLite. Прод — корневой Dockerfile + SERVICE_ROLE.
 # Postgres: docker-compose.postgres.yml
+# Qdrant: docker compose --profile enterprise up -d qdrant
 services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    profiles: ["enterprise"]
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
   api:
     build:
       context: .
@@ -17,8 +27,15 @@ services:
       YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:-}
       YANDEX_MODEL: ${YANDEX_MODEL:-yandexgpt/latest}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      VECTOR_BACKEND: ${VECTOR_BACKEND:-chroma}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      DEPLOY_PROFILE: ${DEPLOY_PROFILE:-bothost-demo}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      WARMUP_ON_START: ${WARMUP_ON_START:-delayed}
     volumes:
       - app_state:/srv/app/state
+    ports:
+      - "8000:8000"
 
   bot:
     build:
@@ -34,3 +51,4 @@ services:
 
 volumes:
   app_state:
+  qdrant_data:

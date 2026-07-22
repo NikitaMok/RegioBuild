@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from loguru import logger
 
-from app.api.routes import compare, feedback, info
+from app.api.routes import compare, feedback, info, v1
 from app.api.schemas import RegionInfo, RegionsResponse
 from app.core.config import get_settings
 from app.core.regions import REGIONS
@@ -124,6 +124,7 @@ except Exception:
 app.include_router(info.router)
 app.include_router(compare.router)
 app.include_router(feedback.router)
+app.include_router(v1.router)
 
 
 @app.get("/health", tags=["system"])

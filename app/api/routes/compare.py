@@ -10,18 +10,24 @@ from app.api.query_logging import log_query
 from app.api.rate_limit import RateLimitExceeded, ensure_within_daily_limit
 from app.api.schemas import AgentResponse, CompareRequest
 from app.core.business_type import MAX_QUERY_LENGTH, looks_like_prompt_injection
-from app.core.regions import REGIONS
+from app.core.regions import REGIONS, resolve_region_code
 
 router = APIRouter(tags=["compare"])
 
 
 @router.post("/compare", response_model=AgentResponse)
 def compare_regions(payload: CompareRequest, request: Request) -> AgentResponse:
-    for region_code in (payload.region_a, payload.region_b):
+    try:
+        region_a = resolve_region_code(payload.region_a)
+        region_b = resolve_region_code(payload.region_b)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    for region_code in (region_a, region_b):
         if region_code not in REGIONS:
             raise HTTPException(status_code=422, detail=f"неизвестный регион: {region_code}")
 
-    if payload.region_a == payload.region_b:
+    if region_a == region_b:
         raise HTTPException(status_code=422, detail="для сравнения нужны два разных региона")
     if len(payload.business_type) > MAX_QUERY_LENGTH:
         raise HTTPException(status_code=422, detail="слишком длинный тип бизнеса")
@@ -40,7 +46,7 @@ def compare_regions(payload: CompareRequest, request: Request) -> AgentResponse:
     try:
         from app.agent.graph import run_compare_query
 
-        agent_state = run_compare_query(payload.business_type, payload.region_a, payload.region_b)
+        agent_state = run_compare_query(payload.business_type, region_a, region_b)
     except Exception as exc:
         logger.exception("агент упал с необработанным исключением")
         raise HTTPException(status_code=500, detail=f"внутренняя ошибка агента: {exc}") from exc
@@ -51,8 +57,8 @@ def compare_regions(payload: CompareRequest, request: Request) -> AgentResponse:
 
     query_log_id = log_query(
         mode="compare",
-        region_a=payload.region_a,
-        region_b=payload.region_b,
+        region_a=region_a,
+        region_b=region_b,
         business_type=payload.business_type,
         response_text=response_text,
         telegram_user_id=payload.telegram_user_id,
