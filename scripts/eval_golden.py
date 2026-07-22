@@ -1,6 +1,6 @@
-"""Заготовки Wave 4: golden / Ragas появятся после categories.xlsx и golden.json.
+"""Прогон golden-набора (пункты НПА / faithfulness), когда готов golden.json.
 
-Запуск (когда файлы на месте):
+Запуск:
   python -m scripts.eval_golden --golden app/eval/datasets/golden.json
 """
 
@@ -18,14 +18,14 @@ BASE = Path(__file__).resolve().parent.parent
 def run(golden_path: Path) -> int:
     if not golden_path.exists():
         logger.error(
-            f"нет файла {golden_path}. Пришлите golden.json (DeepSeek) — "
-            "тогда считаем recall/precision по пунктам и Ragas Faithfulness."
+            f"нет файла {golden_path}. Положите golden.json в указанный путь — "
+            "тогда считаем метрики по пунктам и faithfulness."
         )
         return 2
     payload = json.loads(golden_path.read_text(encoding="utf-8"))
     cases = payload.get("cases") or payload.get("questions") or []
     logger.info(f"загружено кейсов: {len(cases)} — полный прогон требует живой API/LLM")
-    logger.info("скелет готов; интеграция Ragas — после появления датасета")
+    logger.info("скелет готов; полный eval — после появления датасета")
     return 0
 
 

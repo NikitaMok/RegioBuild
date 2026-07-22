@@ -1,85 +1,91 @@
 # Архитектура RegioBuild
 
-Техническое устройство пайплайна: от НПА до ответа пользователю. Продуктовое
-описание — в корневом [`README.md`](../README.md).
+Как устроен пайплайн от НПА до ответа. Продуктовое описание —
+[`README.md`](../README.md).
 
-## Общая схема
+## Схема
 
 ```mermaid
 flowchart TD
-    User[Пользователь Telegram] --> Bot[aiogram Bot]
-    Bot --> API[FastAPI Backend]
+    User[Telegram / HTTP-клиент] --> Bot[aiogram Bot]
+    Bot --> API[FastAPI]
     API --> Agent[LangGraph Agent]
 
     subgraph AgentFlow [LangGraph]
         N0[normalize_business_type] --> N1[understand_query]
-        N1 --> N2[retrieve_chunks]
-        N2 --> N3[classify_requirements]
-        N3 --> N4[llm_compare_or_extract]
-        N4 --> N5[format_response_with_citations]
+        N1 --> N2[query_transform]
+        N2 --> N3[retrieve_chunks]
+        N3 --> N4[classify_requirements]
+        N4 --> N5[rerank_retrieved]
+        N5 --> N6[llm_compare_or_extract]
+        N6 --> N7[format_response + guardrail]
     end
 
-    N0 --> LLMProvider["LLMProvider: GigaChat / YandexGPT"]
-    N2 -- "региональные + федеральные чанки" --> VectorDB[(Chroma)]
-    N3 --> Classifier["TF-IDF + LogisticRegression"]
-    N4 --> LLMProvider
-    N5 --> Grounding[Citation grounding]
-    Grounding --> QueryLog[(QueryLog / audit)]
+    N0 --> LLM["LLMProvider: GigaChat"]
+    N3 -- "регион + RU-FED" --> VectorDB[(Qdrant)]
+    N4 --> Classifier["TF-IDF + LogisticRegression"]
+    N6 --> LLM
+    N7 --> QueryLog[(query_logs)]
 
-    subgraph Ingestion [Offline пайплайн]
-        Scrape[Сбор РНГП + СП 42] --> Parse[Парсинг и антиjunk]
-        Parse --> Chunk[Чанкинг по пунктам]
-        Chunk --> Embed[sentence-transformers]
+    subgraph Ingestion [Offline]
+        PDF[PDF в data/raw/docs] --> Parse[иерархический pdf_parser]
+        Parse --> Structured[data/structured]
+        Structured --> Embed[sentence-transformers]
         Embed --> VectorDB
-        Chunk --> MetaDB[(SQL метаданные)]
-        Curated[Curated 123-ФЗ / СанПиН] --> VectorDB
+        Manifest[documents.yaml / regions.yaml] --> Parse
     end
 ```
 
-## Почему так
+## Решения
 
-- **Retrieval и generation разведены.** Recall@k / MRR и «юридическую читаемость»
-  ответа меряем отдельно — иначе непонятно, где чинить: индекс или промпт.
-- **`LLMProvider`.** Общий интерфейс под GigaChat и YandexGPT: вендора меняем
-  без переписывания графа. В проде по умолчанию GigaChat; failover на Yandex
-  не включаем без явной необходимости.
-- **`normalize_business_type` до retrieval.** Длинные фразы («требования к
-  строительству автомойки…») и падежи плохо матчятся с канцеляритом НПА.
-  Сначала извлекаем тип объекта (корни/whitelist), LLM — только если не вышло.
-- **Федеральный фон.** СП 42.13330.2016 (и curated-выдержки 123-ФЗ / СанПиН)
-  не выбираются как «регион». Приоритет у регионального акта; федеральный
-  подмешивается с явной пометкой уровня.
-- **Citation grounding.** Пункты из ответа LLM сверяются с retrieved-чанками;
-  выдуманные номера отбрасываются. При пустом usable retrieval — честный отказ,
-  без галлюцинаций «от себя».
-- **API отдельно от бота.** Telegram — один из клиентов; тот же FastAPI
-  можно дернуть из своего сервиса.
+- **Retrieval и generation разделены.** Метрики поиска (Recall@k, MRR) и
+  читаемость ответа смотрим отдельно — иначе непонятно, чинить индекс или промпт.
+- **`LLMProvider`.** Один интерфейс; в проде GigaChat. YandexGPT в коде есть,
+  failover по умолчанию выключен.
+- **Нормализация типа объекта до retrieval.** Длинные фразы и падежи плохо
+  матчятся с канцеляритом НПА: сначала whitelist/корни, модель — если не вышло.
+- **Гибридный retrieval.** Dense (Qdrant) + лёгкий BM25 по кандидатам; при
+  `VECTOR_BACKEND=chroma` — тот же контракт на legacy-индексе.
+- **Федеральный фон.** `RU-FED` не выбирается как «регион» в UI. Региональный
+  акт в приоритете; федеральные фрагменты идут с явной пометкой уровня.
+- **Grounding и guardrail.** Пункты из JSON модели сверяются с
+  `section_number` чанков; лишние цифры в ответе могут заблокировать выдачу.
+  Нет опоры в корпусе — честный отказ, без нормы «от себя».
+- **API отдельно от бота.** Telegram ходит на `/info` и `/compare`; есть также
+  `/api/v1/info` и `/api/v1/compare` для внешнего контура.
 
-## Runtime-роли
+## Роли в runtime
 
-Один Docker-образ, роль через `SERVICE_ROLE`:
+Один образ, `SERVICE_ROLE`:
 
 | Роль | Процесс |
 |------|---------|
-| `api` | FastAPI (`/info`, `/compare`, `/health`, `/metrics`), warmup embeddings |
+| `api` | FastAPI, warmup embeddings, `/metrics` |
 | `bot` | aiogram long polling → HTTP к API |
 
-Локально удобнее `docker-compose` (два сервиса). На хостинге без compose —
-два инстанса одного `Dockerfile`.
+Локально удобен `docker compose`. На хостинге — два инстанса одного Dockerfile.
+
+`WARMUP_ON_START=delayed` предпочтительнее `immediate` на машинах с ~2 GB RAM.
 
 ## Данные
 
 | Слой | Назначение |
 |------|------------|
-| `data/raw` | исходники НПА (не в git) |
-| `data/processed` | чанки после парсинга (не в git) |
-| `data/chroma` | векторный индекс (в git — для сборки образа без переиндекса на слабой VPS) |
-| `data/curated` | точечные выдержки (123-ФЗ, СанПиН, региональные якоря) |
-| SQL (SQLite/Postgres) | документы, чанки, `query_logs` (audit: секции, latency, feedback) |
+| `data/raw/docs` | исходные PDF (не в git) |
+| `data/structured` | clauses/chunks после `parse_pdf_docs` |
+| `config/documents.yaml` | манифест ingest (federal/regional; municipal выключен) |
+| `config/regions.yaml` | ISO-коды, алиасы, реквизиты актов |
+| Qdrant Cloud / локальный | коллекция `regiobuild_normative` |
+| `data/chroma` | legacy-индекс (опционально) |
+| `data/curated` | точечные выдержки (123-ФЗ, СанПиН и др.) |
+| SQL | документы, чанки, `query_logs` |
 
 ## Observability
 
-- Prometheus: `GET /metrics`
-- Sentry: по `SENTRY_DSN`
-- LLM cache: memory + disk (экономия токенов на повторах)
-- Rate limit: дневной лимит на `telegram_user_id`
+- Prometheus: `GET /metrics` (в т.ч. `regiobuild_guardrail_blocks_total`)
+- Sentry по `SENTRY_DSN`
+- LLM cache: memory + disk
+- Дневной лимит запросов на `telegram_user_id`
+
+Подключение Grafana Cloud: [`GRAFANA.md`](GRAFANA.md) — нужны scrape или
+remote write; одних переменных в env недостаточно.

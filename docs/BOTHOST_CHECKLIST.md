@@ -47,8 +47,8 @@
 - Подключение к Grafana Cloud: см. [`docs/GRAFANA.md`](GRAFANA.md).
 - Токены Cloud только в env, не в git.
 
-## Qdrant (enterprise)
+## Qdrant
 
-Локально: `docker compose --profile enterprise up -d qdrant`, затем
-`VECTOR_BACKEND=qdrant` и `python -m scripts.index_qdrant`.
-На Bothost 2 GB — профиль `bothost-demo` с Chroma до выделения ресурсов под Qdrant.
+На Bothost в API env: `VECTOR_BACKEND=qdrant`, `QDRANT_URL`, `QDRANT_API_KEY`,
+коллекция `regiobuild_normative`. Локально при необходимости Chroma:
+`pip install -r requirements-legacy-chroma.txt` и `VECTOR_BACKEND=chroma`.

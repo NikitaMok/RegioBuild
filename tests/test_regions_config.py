@@ -24,7 +24,7 @@ def test_curated_federal_sources_cover_fz123_and_sanpin() -> None:
     labels = {c.source_label for c in chunks}
     assert any("123-ФЗ" in label for label in labels)
     assert any("СанПиН" in label for label in labels)
-    # legacy region codes still present in curated until Wave 2 reindex
+    # в curated пока могут быть и legacy-коды регионов
     assert any(c.region_code in {"novosibirsk_oblast", "RU-NVS"} for c in chunks)
 
 

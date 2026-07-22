@@ -29,7 +29,7 @@ COPY alembic.ini .
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh && mkdir -p /app/data
 
-# кураторские выдержки (123-ФЗ, СанПиН, точечные региональные) — в индекс образа
+# curated JSONL в образе; upsert в Chroma — только локально при установленном chromadb
 RUN python -m scripts.ingest_curated
 
 EXPOSE 8000
