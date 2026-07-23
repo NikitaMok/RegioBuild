@@ -216,8 +216,10 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "«склад»" in text
     assert "в Московской области" in text
     assert "Правовое регулирование (регион)" in text
-    assert "Федеральный уровень" in text
-    assert "Региональный уровень" in text
+    assert "Федеральные требования" in text
+    assert "Региональные требования" in text
+    assert "Региональный уровень" not in text
+    assert "Федеральный уровень" not in text
     assert "Наличие требований по объекту" not in text
     assert "Сроки и документы:" in text
     assert "п. 3.2" in text
@@ -232,6 +234,9 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "федеральный:" not in text
     # пункт → НПА (родительный)
     assert "п. 3.2 Постановления" in text
+    assert "🏛" in text
+    assert "📜" in text
+    assert "Дополнительно применяются федеральные нормы" not in text
 
 
 def test_audit_sections_from_state_dedupes_chunks() -> None:
@@ -297,10 +302,13 @@ def test_render_extraction_marks_federal_fallback_item() -> None:
     text = nodes._render_extraction(extraction)
 
     assert "СП 42.13330.2016" in text or "п. 5.1" in text
-    assert "Региональный уровень" in text
+    assert "Региональные требования" in text
     assert "не установлены" in text
-    assert "применяются федеральные" in text
-    assert "Федеральный уровень" in text
+    assert "Дополнительно применяются федеральные нормы" not in text
+    assert "Федеральные требования" in text
+    assert "применяются федеральные" not in text
+    assert "Региональный уровень" not in text
+    assert "Федеральный уровень" not in text
 
 
 def test_render_extraction_flags_general_norms_when_no_specific_ones_found() -> None:
@@ -318,8 +326,8 @@ def test_render_extraction_flags_general_norms_when_no_specific_ones_found() -> 
     )
     text = nodes._render_extraction(extraction)
 
-    assert "Специальных требований" in text
-    assert "общие нормы" in text
+    assert "Специальных требований" not in text or "общие положения" in text
+    assert "общие положения" in text
     assert "Срок выдачи разрешения" in text
 
 
@@ -345,7 +353,8 @@ def test_render_extraction_shows_specific_and_general_separately() -> None:
     text = nodes._render_extraction(extraction)
 
     assert "Спец. норма про склады" in text
-    assert "Дополнительно применяются следующие общие нормы" in text
+    assert "Общие положения:" in text
+    assert "Дополнительно применяются следующие общие нормы" not in text
     assert "Общая норма про сроки" in text
 
 
@@ -421,6 +430,8 @@ def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:
     assert "⚖" in text
     assert "📜" in text
     assert "🗺" not in text
+    assert "применяются при отсутствии региональных" not in text
+    assert "Федеральные нормы:" in text
 
 
 def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
@@ -443,12 +454,16 @@ def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
     text = nodes._render_comparison(comparison)
 
     assert "предоставленных фрагментах" not in text
-    assert (
-        "в нормативе субъекта соответствующие требования не установлены" in text
-        or "региональные требования по данному параметру отсутствуют" in text
-    )
+    assert "специальные требования по указанному вопросу не установлены" in text.lower()
     assert "номер пункта в доступных фрагментах не приведён" not in text
-    assert "реквизиты структурной единицы акта" in text
+    assert "реквизиты структурной единицы акта" not in text
+    # сторона сравнения без нормы — без скобочной ссылки на акт
+    side_lines = [
+        line for line in text.splitlines() if "🔹" in line and "Московская область" in line
+    ]
+    assert side_lines
+    assert "(" not in side_lines[0]
+    assert "Постановлен" not in side_lines[0]
 
 
 def test_punkt_label_word_curated_not_fake_clause() -> None:
@@ -477,6 +492,48 @@ def test_polish_response_strips_number_list_artifact() -> None:
     assert "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12" not in cleaned
 
 
+def test_polish_response_strips_slash_s_artifact() -> None:
+    junk = (
+        "Требование к автомойке.\n"
+        "### /с/ /с/ /с/ /с/ /с/ /с/ /с/ /c/ /с/ /с/ "
+        "(с/с/ /с/ /с/ /с/)\n"
+        "Далее текст."
+    )
+    cleaned = nodes._polish_response_text(junk)
+    assert "/с/" not in cleaned
+    assert "/c/" not in cleaned.lower() or "автомойке" in cleaned
+    assert "###" not in cleaned
+    assert "Требование к автомойке" in cleaned
+    assert "Далее текст" in cleaned
+
+
+def test_format_response_aspect_refusal_is_primary_answer() -> None:
+    refusal = (
+        "По вашему запросу в доступных источниках сервиса не установлены "
+        "прямые нормативы по площади участка."
+    )
+    result = nodes.format_response(
+        {"error": refusal, "refusal_kind": "aspect"}
+    )
+    assert result["response_text"].startswith("По вашему запросу")
+    assert "Не удалось получить ответ" not in result["response_text"]
+    assert "Вышеуказанные сведения носят справочный характер!" in result["response_text"]
+    assert "<i>" in result["response_text"]
+
+
+def test_format_response_appends_disclaimer_on_success() -> None:
+    state = {
+        "mode": "info",
+        "extraction": ExtractionResult(region_code="moscow_oblast", business_type="склад", items=[]),
+    }
+    result = nodes.format_response(state)
+    assert "Вышеуказанные сведения носят справочный характер!" in result["response_text"]
+    assert "<i>" in result["response_text"]
+    assert "не является юридической консультацией" in result["response_text"]
+    assert "органов местного самоуправления" in result["response_text"]
+    assert "Справочный характер сведений</b>." not in result["response_text"]
+
+
 def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> None:
     comparison = ComparisonResult(
         region_a="moscow_oblast",
@@ -497,8 +554,9 @@ def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> 
     )
     text = nodes._render_comparison(comparison)
 
-    assert "Специальных норм" in text
-    assert "общие требования" in text
+    assert "Специальных норм" not in text
+    assert "общие положения" in text
+    assert "сравниваю общие требования" not in text
 
 
 def test_citation_matches_chunks_accepts_known_section() -> None:
@@ -703,17 +761,6 @@ def test_normalize_business_type_fixes_typo_without_llm(monkeypatch) -> None:
 
     state = nodes.normalize_business_type({"business_type": "медьцынский центр"})
     assert state["business_type"] == "медицинский центр"
-
-
-def test_format_response_appends_disclaimer_on_success() -> None:
-    state = {
-        "mode": "info",
-        "extraction": ExtractionResult(region_code="moscow_oblast", business_type="склад", items=[]),
-    }
-    result = nodes.format_response(state)
-    assert "Справочный характер сведений" in result["response_text"]
-    assert "не является юридической консультацией" in result["response_text"]
-    assert "органов местного самоуправления" in result["response_text"]
 
 
 def test_format_response_shows_normalized_business_type_prefix() -> None:

@@ -12,11 +12,11 @@
 2. Connections → Add new connection → **Prometheus**.
 3. Варианты доставки метрик:
 
-### A) Scrape публичного Bothost `/metrics`
+### A) Scrape публичного `/metrics`
 
-Если API доступен с интернета:
+Если API доступен с интернета (VPS / reverse proxy):
 - Prometheus datasource URL = ваш Grafana Agent / Cloud scraper, target =
-  `https://bot-…-….bothost.tech/metrics`
+  `https://<host>/metrics`
 
 ### B) Remote write (рекомендуется)
 
@@ -26,7 +26,7 @@
 - `GRAFANA_CLOUD_PROMETHEUS_USER`
 - `GRAFANA_CLOUD_PROMETHEUS_TOKEN`
 
-Положить в локальный `.env` / `bothost-api.env` (**не коммитить**).
+Положить в локальный `.env` (**не коммитить**).
 
 Enterprise compose может поднять Grafana Alloy sidecar, который читает
 `http://api:3000/metrics` и пушит в Cloud.

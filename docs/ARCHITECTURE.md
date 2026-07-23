@@ -30,28 +30,32 @@ flowchart TD
     subgraph Ingestion [Offline]
         PDF[PDF в data/raw/docs] --> Parse[иерархический pdf_parser]
         Parse --> Structured[data/structured]
-        Structured --> Embed[sentence-transformers]
+        Structured --> Embed["Embedder: fastembed / ONNX"]
         Embed --> VectorDB
         Manifest[documents.yaml / regions.yaml] --> Parse
     end
 ```
 
+Узлы графа совпадают с `app/agent/graph.py`: normalize → understand →
+query_transform → retrieve → classify → rerank → LLM → format/guardrail.
+
 ## Решения
 
 - **Retrieval и generation разделены.** Метрики поиска (Recall@k, MRR) и
   читаемость ответа смотрим отдельно — иначе непонятно, чинить индекс или промпт.
-- **`LLMProvider`.** Один интерфейс; в проде GigaChat. YandexGPT в коде есть,
-  failover по умолчанию выключен.
+- **`LLMProvider`.** Один интерфейс; в проде GigaChat Ultra (`GigaChat-3-Ultra`,
+  `api.giga.chat`). YandexGPT в коде есть, failover по умолчанию выключен.
 - **Нормализация типа объекта до retrieval.** Длинные фразы и падежи плохо
   матчятся с канцеляритом НПА: сначала whitelist/корни, модель — если не вышло.
 - **Гибридный retrieval.** Dense (Qdrant) + лёгкий BM25 по кандидатам; при
   `VECTOR_BACKEND=chroma` — тот же контракт на legacy-индексе.
-- **Embeddings.** На Bothost/demo — `fastembed` (ONNX, без PyTorch в RAM).
-  Enterprise может использовать `sentence_transformers` (в т.ч. e5-large) через
+- **Embeddings.** В проде и в Docker-образе — `fastembed` (ONNX, без PyTorch в
+  RAM). Опционально enterprise: `sentence_transformers` (в т.ч. e5-large) через
   `EMBEDDING_BACKEND` и `requirements-enterprise-embeddings.txt`. Индекс и
   runtime должны совпадать по backend.
 - **Федеральный фон.** `RU-FED` не выбирается как «регион» в UI. Региональный
-  акт в приоритете; федеральные фрагменты идут с явной пометкой уровня.
+  акт в приоритете; федеральные требования выводятся отдельным блоком с
+  `source_level` в API / явным разделом в ответе бота.
 - **Grounding и guardrail.** Пункты из JSON модели сверяются с
   `section_number` чанков; лишние цифры в ответе могут заблокировать выдачу.
   Нет опоры в корпусе — честный отказ, без нормы «от себя».
@@ -67,9 +71,13 @@ flowchart TD
 | `api` | FastAPI, warmup embeddings, `/metrics` |
 | `bot` | aiogram long polling → HTTP к API |
 
-Локально удобен `docker compose`. На хостинге — два инстанса одного Dockerfile.
+Локально удобен `docker compose`. Прод — VPS Aeza
+([`PRODUCTION.md`](PRODUCTION.md)): nginx, API, bot, Prometheus/Alertmanager.
+Тот же Dockerfile подходит и для PaaS-подобных площадок (см. исторический
+[`BOTHOST_CHECKLIST.md`](BOTHOST_CHECKLIST.md)).
 
-`WARMUP_ON_START=delayed` предпочтительнее `immediate` на машинах с ~2 GB RAM.
+`WARMUP_ON_START=delayed` предпочтительнее `immediate` на машинах с ~2 GB RAM;
+на части PaaS — `off` (модель поднимается на первом запросе).
 
 ## Данные
 
@@ -92,4 +100,4 @@ flowchart TD
 - Дневной лимит запросов на `telegram_user_id`
 - Grafana Cloud: креды remote write / scrape в env; пайплайн —
   [`GRAFANA.md`](GRAFANA.md). Одни переменные без scrape/Alloy в Cloud не
-  заполняют Active Series — нужен явный pipe с Bothost `/metrics`.
+  заполняют Active Series — нужен явный pipe к публичному `/metrics` API.

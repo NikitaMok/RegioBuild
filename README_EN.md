@@ -121,8 +121,8 @@ Targets: **100** cases in `data/eval/golden.jsonl`, hit rate **≥ 95%** (aim 99
 LLM: `temperature=0.0` on all calls (normalization, extraction, compare) for
 deterministic NPA answers.
 
-Current honest runs (`fastembed` + Qdrant, full corpus, no curated JSONL
-force-inject and no CURATED-only search):
+Current retrieval runs (`fastembed` + Qdrant, full corpus; no curated-anchor
+injection into context and no curated-only search):
 
 | Set | Hit rate | Role |
 |-----|----------|------|
@@ -132,7 +132,8 @@ force-inject and no CURATED-only search):
 Blind ≥ 90% is the robustness target in scope; golden alone is not “ready for demo”.
 Safety: citation grounding + numeric guardrail; weak/empty support → refusal.
 Not claimed: site-level legal correctness of answers. Possible future commercial
-upgrade: human-in-the-loop verification / deeper answer-eval (not current DoD).
+upgrade: human-in-the-loop verification / deeper answer-eval (outside the
+current readiness criteria).
 
 Blind run:
 `python -m scripts.eval_golden --golden data/eval/blind_paraphrase.jsonl`

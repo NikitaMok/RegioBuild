@@ -72,7 +72,7 @@ python -m scripts.eval_golden
 
 ## 7. Прод
 
-Пуш → recreate API на Bothost (см. `docs/BOTHOST_CHECKLIST.md`) →
+Пуш → выкладка на VPS (см. `docs/PRODUCTION.md`) →
 `/health` → smoke-запрос по новому региону через `/api/v1/info`.
 
 Регион появляется в `/regions`, клавиатуре бота и валидации API

@@ -44,6 +44,28 @@ def test_plot_area_unsupported_without_evidence() -> None:
     )
     assert "площади" in msg.lower() or "участк" in msg.lower()
     assert "ПЗЗ" in msg
+    assert "индекс" not in msg.lower()
+    assert "фрагмент" not in msg.lower()
+
+
+def test_plot_area_szz_meters_not_enough_evidence() -> None:
+    """СЗЗ «300 м» без площади участка — не опора для plot_area."""
+    aspects = detect_aspects(
+        "Нормы по площади участка для складов в Свердловской области"
+    )
+    chunks = [
+        RetrievedChunk(
+            id="1",
+            text="Санитарно-защитная зона для складов II–III класса — 300 м. "
+            "Противопожарные расстояния по ст. 69 123-ФЗ.",
+            region_code="RU-SVE",
+            section_number="7.1",
+            category=None,
+            distance=0.1,
+        )
+    ]
+    assert aspects
+    assert not aspects_supported(aspects, chunks)
 
 
 def test_plot_area_unsupported_for_uchastok_synonym() -> None:
