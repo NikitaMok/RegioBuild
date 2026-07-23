@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     gigachat_credentials: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"
-    gigachat_model: str = "GigaChat-2-Pro"
+    gigachat_model: str = "GigaChat-3-Ultra"
     # у GigaChat свой корень НУЦ — без флага SSL-проверка падает
     gigachat_verify_ssl_certs: bool = False
 
