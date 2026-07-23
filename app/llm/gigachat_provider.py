@@ -30,6 +30,7 @@ class GigaChatProvider(LLMProvider):
         self._credentials = settings.gigachat_credentials
         self._scope = settings.gigachat_scope
         self._model = settings.gigachat_model
+        self._base_url = settings.gigachat_base_url
         self._verify_ssl_certs = settings.gigachat_verify_ssl_certs
 
     @retry(
@@ -49,12 +50,15 @@ class GigaChatProvider(LLMProvider):
         from gigachat.models import Chat, Messages, MessagesRole
 
         try:
-            with GigaChat(
-                credentials=self._credentials,
-                scope=self._scope,
-                model=self._model,
-                verify_ssl_certs=self._verify_ssl_certs,
-            ) as client:
+            client_kwargs: dict = {
+                "credentials": self._credentials,
+                "scope": self._scope,
+                "model": self._model,
+                "verify_ssl_certs": self._verify_ssl_certs,
+            }
+            if self._base_url:
+                client_kwargs["base_url"] = self._base_url
+            with GigaChat(**client_kwargs) as client:
                 chat = Chat(
                     messages=[
                         Messages(role=MessagesRole.SYSTEM, content=system_prompt),

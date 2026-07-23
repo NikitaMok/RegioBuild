@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     gigachat_credentials: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"
     gigachat_model: str = "GigaChat-3-Ultra"
+    # с 17.07.2026 целевой URL — api.giga.chat (Ultra только здесь)
+    gigachat_base_url: str = "https://api.giga.chat/v1"
     # у GigaChat свой корень НУЦ — без флага SSL-проверка падает
     gigachat_verify_ssl_certs: bool = False
 

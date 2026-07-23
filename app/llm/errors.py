@@ -19,6 +19,11 @@ def friendly_llm_failure(exc: BaseException, *, mode: str = "info") -> str:
                 "Обновите GIGACHAT_CREDENTIALS в .env в кабинете разработчика Сбера "
                 "и перезапустите API."
             )
+        if "404" in text or "no such model" in lowered:
+            return (
+                "Указанная модель GigaChat недоступна для текущего ключа API. "
+                "Проверьте GIGACHAT_MODEL в .env и список моделей в кабинете Сбера."
+            )
         if "403" in text or "forbidden" in lowered:
             return "GigaChat запретил запрос (403). Проверьте scope/модель и доступ проекта."
         if "429" in text or "quota" in lowered or "rate" in lowered or "limit" in lowered:

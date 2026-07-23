@@ -79,9 +79,9 @@ Nodes drive the flow end-to-end:
 5. requirement classification and rerank  
 6. grounded generation and formatting  
 
-The LLM sits behind a provider abstraction: **GigaChat Ultra** (`GigaChat-3-Ultra`)
-in production; YandexGPT is in the codebase with failover off by default — no
-agent rewrite to switch.
+The LLM sits behind a provider abstraction: **GigaChat Ultra** (`GigaChat-3-Ultra`
+via `api.giga.chat`) in production; YandexGPT is in the codebase with failover
+off by default — no agent rewrite to switch.
 
 ### Production
 

@@ -80,8 +80,9 @@ guardrail по цифрам в тексте ответа.
 5. классификация требований и rerank  
 6. генерация с grounding и форматирование ответа  
 
-LLM вынесен за абстракцию провайдера: в проде **GigaChat Ultra** (`GigaChat-3-Ultra`);
-YandexGPT в коде есть, failover по умолчанию выключен — без переписывания графа.
+LLM вынесен за абстракцию провайдера: в проде **GigaChat Ultra** (`GigaChat-3-Ultra`
+через `api.giga.chat`); YandexGPT в коде есть, failover по умолчанию выключен —
+без переписывания графа.
 
 ### Production
 
