@@ -20,9 +20,15 @@ from app.core.business_type import (
 from app.core.config import get_settings
 from app.core.legal import DISCLAIMER_TEXT
 from app.core.npa_titles import (
+    expand_npa_label,
+    federal_source_url,
     federal_sp42_label,
-    short_federal_cite_from_citation,
-    short_npa_cite,
+    full_federal_cite_from_citation,
+)
+from app.core.query_aspects import (
+    aspects_supported,
+    detect_aspects,
+    refusal_for_unsupported_aspects,
 )
 from app.core.regions import FEDERAL_CODE, get_region
 from app.llm.base import DEFAULT_MAX_TOKENS, LLMProviderError
@@ -520,6 +526,21 @@ def retrieve_chunks(state: AgentState) -> AgentState:
             "Сверьте РНГП региона, 123-ФЗ и СанПиН в первоисточнике "
             "или уточните тип объекта / субъект РФ."
         )
+    else:
+        # узкий аспект запроса (напр. площадь участка) без опоры в чанках → отказ, не подмена темы
+        raw_query = (state.get("business_type_raw") or business_type or "").strip()
+        aspects = detect_aspects(raw_query)
+        all_chunks = list(chunks_a) + list(chunks_federal) + list(chunks_b)
+        if aspects and not aspects_supported(aspects, all_chunks):
+            try:
+                region_label = get_region(state["region_a"]).name_locative
+            except Exception:
+                region_label = "выбранном субъекте РФ"
+            new_state["error"] = refusal_for_unsupported_aspects(
+                aspects,
+                business_type=state.get("business_type") or business_type,
+                region_label=region_label,
+            )
 
     return new_state
 
@@ -891,16 +912,57 @@ def _punkt_label(citation: str) -> str:
     return f"п. {normalized}"
 
 
-def _short_npa_for_item(citation: str, source_level: str, region_code: str) -> str:
+def _full_npa_for_item(citation: str, source_level: str, region_code: str) -> str:
     if source_level == "федеральный":
-        return short_federal_cite_from_citation(citation)
-    return short_npa_cite(get_region(region_code).document_title)
+        return full_federal_cite_from_citation(citation)
+    return get_region(region_code).document_title
+
+
+def _source_url_for_item(citation: str, source_level: str, region_code: str) -> str:
+    if source_level == "федеральный":
+        return federal_source_url(citation)
+    return (get_region(region_code).source_url or "").strip()
+
+
+def _html_link(url: str, label: str) -> str:
+    safe_url = html.escape(url, quote=True)
+    return '<a href="{}">{}</a>'.format(safe_url, _esc(label))
 
 
 def _format_item_source(citation: str, source_level: str, region_code: str) -> str:
-    npa = _short_npa_for_item(citation, source_level, region_code)
+    """Полное название НПА + пункт + ссылка на первоисточник (HTML для Telegram)."""
+    npa = _full_npa_for_item(citation, source_level, region_code)
     level = "федеральный" if source_level == "федеральный" else "региональный"
-    return f"({_esc(level)}: {_esc(npa)}, {_esc(_punkt_label(citation))})"
+    punkt = _punkt_label(citation)
+    url = _source_url_for_item(citation, source_level, region_code)
+    parts = f"({_esc(level)}: {_esc(npa)}; {_esc(punkt)}"
+    if url:
+        return f"{parts}; {_html_link(url, 'открыть первоисточник')})"
+    return f"{parts})"
+
+
+def _format_compare_side(
+    region_code: str,
+    value: str,
+    citation: str,
+    source_level: str,
+    side_emoji: str,
+) -> str:
+    if source_level == "федеральный":
+        npa = full_federal_cite_from_citation(citation)
+        url = federal_source_url(citation)
+    else:
+        region = get_region(region_code)
+        npa = region.document_title
+        url = (region.source_url or "").strip()
+    region = get_region(region_code)
+    cite = f"{_esc(npa)}; {_esc(_punkt_label(citation))}"
+    if url:
+        cite = f"{cite}; {_html_link(url, 'первоисточник')}"
+    return (
+        f"  {side_emoji} <b>{_esc(region.display_name)}</b> "
+        f"({cite}): {_esc(_humanize_missing_value(value))}"
+    )
 
 
 def audit_sections_from_state(state: AgentState) -> list[dict[str, str | None]]:
@@ -920,25 +982,6 @@ def audit_sections_from_state(state: AgentState) -> list[dict[str, str | None]]:
                 }
             )
     return rows
-
-
-def _format_compare_side(
-    region_code: str,
-    value: str,
-    citation: str,
-    source_level: str,
-    side_emoji: str,
-) -> str:
-    region = get_region(region_code)
-    if source_level == "федеральный":
-        npa = short_federal_cite_from_citation(citation)
-    else:
-        npa = short_npa_cite(region.document_title)
-    return (
-        f"  {side_emoji} <b>{_esc(region.display_name)}</b> "
-        f"({_esc(npa)}, {_esc(_punkt_label(citation))}): "
-        f"{_esc(_humanize_missing_value(value))}"
-    )
 
 
 def _render_item_bullets(items: list[RequirementItem], region_code: str) -> list[str]:
@@ -1016,12 +1059,46 @@ def _render_extraction(extraction: ExtractionResult) -> str:
     has_regional = bool(regional_items)
     has_federal = bool(federal_items)
 
+    regional_npa = region.document_title
+    federal_npa_names = sorted(
+        {
+            full_federal_cite_from_citation(item.citation)
+            for item in federal_items
+        }
+    )
+
     lines = [
         f"<b>{_greeting_for_info(extraction.business_type, region.name_locative)}</b>",
-        f"🏛 Правовое регулирование (регион): {region.document_title} "
+        f"🏛 Правовое регулирование (регион): {_esc(regional_npa)} "
         f"(проверено {region.last_verified})",
-        f"📜 Федеральный уровень: {sp_label}; при наличии в источниках — также 123-ФЗ и СанПиН.",
     ]
+    if region.source_url:
+        lines.append(
+            "🔗 Региональный первоисточник: "
+            + _html_link(region.source_url, "открыть документ")
+        )
+    lines.append(
+        f"📜 Федеральный уровень: {_esc(sp_label)}; при наличии в источниках — также "
+        f"{_esc(expand_npa_label('123-ФЗ'))} и {_esc(expand_npa_label('СанПиН'))}."
+    )
+
+    lines.append("\n<b>Наличие требований по объекту</b>")
+    if has_regional:
+        lines.append(
+            f"• Региональные: <b>найдены</b> — {_esc(regional_npa)}."
+        )
+    else:
+        lines.append(
+            "• Региональные: <b>не найдены</b> в доступном РНГП/ТСН по данному объекту."
+        )
+    if has_federal:
+        named = "; ".join(federal_npa_names) if federal_npa_names else sp_label
+        lines.append(f"• Федеральные: <b>найдены</b> — {_esc(named)}.")
+    else:
+        lines.append(
+            "• Федеральные: <b>не найдены</b> в объёме СП 42, 123-ФЗ и СанПиН "
+            "по данному объекту."
+        )
 
     lines.append("\n<b>Региональный уровень</b>")
     if has_regional:
@@ -1068,16 +1145,39 @@ def _render_comparison(comparison: ComparisonResult) -> str:
     sp_label = federal_sp42_label()
     lines = [
         f"<b>{_greeting_for_comparison(comparison.business_type, region_a.name_locative, region_b.name_locative)}</b>",
-        f"🏛 {region_a.display_name} — правовое регулирование: {region_a.document_title} "
+        f"🏛 {region_a.display_name} — правовое регулирование: {_esc(region_a.document_title)} "
         f"(проверено {region_a.last_verified})",
-        f"⚖ {region_b.display_name} — правовое регулирование: {region_b.document_title} "
+        f"⚖ {region_b.display_name} — правовое регулирование: {_esc(region_b.document_title)} "
         f"(проверено {region_b.last_verified})",
-        f"📜 Федеральные нормы (применяются при отсутствии региональных): {sp_label}.",
+        f"📜 Федеральные нормы (применяются при отсутствии региональных): {_esc(sp_label)}.",
         f"\n{_esc(comparison.overall_summary)}",
     ]
 
     commons = [item for item in (comparison.common_requirements or []) if _is_concrete_common(item)]
     differences = list(comparison.differences or [])
+
+    lines.append("\n<b>Как читать сравнение</b>")
+    if differences and commons:
+        lines.append(
+            "Сначала — <b>только различия</b> между субъектами; затем отдельный блок "
+            "совпадающих требований (одинаковые нормы или общая опора на федеральный "
+            "уровень). Вне этих блоков иных выводов в ответе нет."
+        )
+    elif differences and not commons:
+        lines.append(
+            "Ниже перечислены <b>различия</b>. Совпадающих конкретных требований "
+            "в доступных источниках не выявлено."
+        )
+    elif commons and not differences:
+        lines.append(
+            "Различий не обнаружено: ниже — требования, которые <b>совпадают</b> "
+            "или одинаково опираются на федеральные нормы."
+        )
+    else:
+        lines.append(
+            "Ни различий, ни совпадающих конкретных требований в доступных "
+            "источниках не выявлено."
+        )
 
     # сначала различия, потом совпадения (только конкретные)
     if differences:
