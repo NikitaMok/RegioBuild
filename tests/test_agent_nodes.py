@@ -684,9 +684,9 @@ def test_format_response_appends_disclaimer_on_success() -> None:
         "extraction": ExtractionResult(region_code="moscow_oblast", business_type="склад", items=[]),
     }
     result = nodes.format_response(state)
-    assert "Справочный помощник RegioBuild" in result["response_text"]
+    assert "Справочный характер сведений" in result["response_text"]
     assert "не является юридической консультацией" in result["response_text"]
-    assert "муниципальном" in result["response_text"]
+    assert "органов местного самоуправления" in result["response_text"]
 
 
 def test_format_response_shows_normalized_business_type_prefix() -> None:
