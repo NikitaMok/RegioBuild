@@ -41,8 +41,10 @@ Enterprise compose может поднять Grafana Alloy sidecar, которы
 
 ## Алерты
 
-- Spike `regiobuild_guardrail_blocks_total` за 15m
-- 5xx > порога
-- health fail
+Локальный стек на VPS: Prometheus + Alertmanager (`docker-compose.prod.yml`),
+правила в `deploy/prometheus/alert_rules.yml` (API down, 5xx, spike guardrail).
+
+Внешний контроль: GitHub Actions **Health check** (`HEALTH_URL` + опционально
+Telegram `ALERT_TELEGRAM_*`). Подробности — [`docs/PRODUCTION.md`](PRODUCTION.md).
 
 Токены Cloud — только в env, см. `.env.example`.
