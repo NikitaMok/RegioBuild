@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.vectorstore.types import RetrievedChunk
@@ -28,17 +29,15 @@ ASPECTS: tuple[QueryAspect, ...] = (
             "обеспеченност",
             "показател",
         ),
+        # для plot_area проверяем отдельно — нужны числовые/площадные маркеры
         evidence_markers=(
-            "площад",
-            "участк",
-            "земельн",
             "га ",
+            "га.",
             " м2",
             "м²",
             "кв.м",
-            "обеспеченност",
-            "показател",
-            "застройк",
+            "кв м",
+            "соток",
         ),
     ),
     QueryAspect(
@@ -56,14 +55,16 @@ def detect_aspects(text: str) -> list[QueryAspect]:
         return []
     found: list[QueryAspect] = []
     for aspect in ASPECTS:
-        # для plot_area требуем и «площад*», и намёк на участок/землю/обеспеченность,
-        # чтобы обычный запрос «склад» не считался аспектом площади
+        # plot_area: «площадь участка» ИЛИ «нормы по участку» (без слова «площадь»)
         if aspect.key == "plot_area":
             has_area = "площад" in lowered
             has_plot = any(
                 m in lowered for m in ("участк", "земельн", "обеспеченност", "показател")
             )
-            if has_area and has_plot:
+            norms_for_plot = ("участк" in lowered) and any(
+                m in lowered for m in ("норм", "требован", "показател", "обеспеченност")
+            )
+            if (has_area and has_plot) or norms_for_plot:
                 found.append(aspect)
             continue
         if aspect.key == "fire_distance":
@@ -86,6 +87,15 @@ def aspects_supported(aspects: list[QueryAspect], chunks: list[RetrievedChunk]) 
     if not corpus.strip():
         return False
     for aspect in aspects:
+        if aspect.key == "plot_area":
+            # одного упоминания «участок/СЗЗ» мало — нужны площадьные величины
+            if any(m in corpus for m in aspect.evidence_markers):
+                continue
+            if ("обеспеченност" in corpus or "показател" in corpus) and re.search(
+                r"\d+[.,]?\d*\s*(га|м2|м²|кв)", corpus
+            ):
+                continue
+            return False
         if not any(m in corpus for m in aspect.evidence_markers):
             return False
     return True

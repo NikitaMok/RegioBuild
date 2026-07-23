@@ -30,7 +30,7 @@ def test_extraction_prompt_includes_federal_block_separately_from_regional() -> 
 
 def test_extraction_prompt_handles_missing_federal_chunks() -> None:
     prompt = build_extraction_prompt("склад", "moscow_oblast", [_chunk("Что-то про склады.")])
-    assert "фрагменты не найдены" in prompt
+    assert "выдержки нормативных актов не найдены" in prompt
 
 
 def test_comparison_prompt_includes_shared_federal_block() -> None:

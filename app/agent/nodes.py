@@ -73,7 +73,7 @@ MAX_WORDS_FOR_RAW_BUSINESS_TYPE = 3
 
 INVALID_BUSINESS_TYPE_ERROR = (
     "Не удалось распознать тип бизнеса. Укажите объект коротко "
-    "(например: кафе, автомойка, склад, медицинский центр)."
+    "(например: кафе, автомойка, склад, медицинский центр и т.д.)."
 )
 
 FORBIDDEN_CONTENT_ERROR = (
@@ -83,11 +83,13 @@ FORBIDDEN_CONTENT_ERROR = (
 
 _MISSING_IN_FRAGMENTS_RE = re.compile(
     r"(не\s+найдено\s+в\s+предоставленных\s+фрагментах|"
+    r"номер\s+пункта\s+в\s+доступных\s+фрагментах\s+не\s+приведён|"
+    r"в\s+доступных\s+фрагментах|"
     r"в\s+нормативе\s+региона\s+не\s+указано)\.?",
     re.IGNORECASE,
 )
-_MISSING_REGION_VALUE = "региональные требования отсутствуют"
-_MISSING_REGION_VALUE_ALT = "в нормативе региона не указано"
+_MISSING_REGION_VALUE = "в нормативе субъекта соответствующие требования не установлены"
+_MISSING_REGION_VALUE_ALT = "региональные требования по данному параметру отсутствуют"
 
 _CITATION_PREFIXES = (
     "пп.",
@@ -175,9 +177,9 @@ def understand_query(state: AgentState) -> AgentState:
     if state.get("error"):
         return state
 
-    business_type = (state.get("business_type") or "").strip()
+    business_type = _display_business_type((state.get("business_type") or "").strip())
     if not business_type:
-        return {**state, "error": "Не указан тип бизнес-объекта."}
+        return {**state, "error": "Не указан тип объекта капитального строительства."}
 
     validation_error = _validate_business_type(business_type)
     if validation_error:
@@ -514,12 +516,16 @@ def retrieve_chunks(state: AgentState) -> AgentState:
     if not chunks_a and not chunks_federal and not chunks_b:
         new_state["error"] = (
             "В доступных источниках (РНГП регионов, ГрК, СП 42, 123-ФЗ, СанПиН) "
-            "не найдено проверяемых нормативных фрагментов по этому объекту. "
+            "не найдено проверяемых положений нормативных правовых актов "
+            "по этому объекту. "
+
             "Рекомендуем сверить муниципальные ПЗЗ и отраслевые НПА напрямую."
         )
     elif _weak_retrieval_support(chunks_a, chunks_federal, chunks_b):
         new_state["error"] = (
-            "Найдено слишком мало проверяемых нормативных фрагментов для надёжного "
+            "Найдено слишком мало проверяемых положений нормативных правовых актов "
+            "для надёжного "
+
             "ответа по этому объекту. Чтобы не давать неподтверждённые требования, "
             "система отказывается от вывода списка норм. "
             "Сверьте РНГП региона, 123-ФЗ и СанПиН в первоисточнике "
@@ -751,7 +757,8 @@ def _esc(text: str) -> str:
 
 
 def _category_label(category: str) -> str:
-    return CATEGORY_LABELS.get(category, category.replace("_", " ").capitalize())
+    label = CATEGORY_LABELS.get(category, category.replace("_", " ").capitalize())
+    return f"{label}:"
 
 
 def _group_by_category(items: list) -> dict[str, list]:
@@ -761,17 +768,24 @@ def _group_by_category(items: list) -> dict[str, list]:
     return groups
 
 
+def _display_business_type(business_type: str) -> str:
+    """Полное наименование объекта в ответах (тц → торговый центр и т.п.)."""
+    return _canon_business_type(business_type) or (business_type or "").strip()
+
+
 def _greeting_for_info(business_type: str, region_locative: str) -> str:
+    label = _display_business_type(business_type)
     return (
         f"Требования к объекту капитального строительства "
-        f"«{_esc(business_type)}» в {region_locative}."
+        f"«{_esc(label)}» в {region_locative}."
     )
 
 
 def _greeting_for_comparison(business_type: str, region_a_locative: str, region_b_locative: str) -> str:
+    label = _display_business_type(business_type)
     return (
         f"Сравнение требований к объекту капитального строительства "
-        f"«{_esc(business_type)}» в {region_a_locative} и в {region_b_locative}."
+        f"«{_esc(label)}» в {region_a_locative} и в {region_b_locative}."
     )
 
 
@@ -908,8 +922,17 @@ def _ground_optional_citation(citation: str, chunks: list[RetrievedChunk]) -> st
     return ""
 
 
+_CLAUSE_MISSING = "реквизиты структурной единицы акта (пункт, таблица, приложение) не приведены"
+_WORD_ONLY_SECTION = re.compile(r"^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\-]*$")
+# артефакт: длинный перечень чисел подряд (1, 2, 3 … 1000)
+_NUMBER_LIST_ARTIFACT_RE = re.compile(
+    r"(?:^|\n)(?:\s*(?:\d{1,4}|[–—\-])\s*(?:[,;.\s]|$)){12,}",
+    re.MULTILINE,
+)
+
+
 def _punkt_label(citation: str) -> str:
-    """Пункт / статья / часть для цитаты рядом с требованием."""
+    """Пункт / статья / таблица / приложение для цитаты рядом с требованием."""
     normalized = _normalize_citation(citation)
     if not normalized or normalized.lower() in {
         "пункт не указан",
@@ -918,21 +941,28 @@ def _punkt_label(citation: str) -> str:
         "-",
         "—",
     }:
-        return "номер пункта в доступных фрагментах не приведён"
-    # curated id: «СанПиН/7.1.3», «123-ФЗ/69» → только номер нормы
+        return _CLAUSE_MISSING
+    # curated id: «СанПиН/7.1.3», «123-ФЗ/69», «СО-доп/склад»
     if "/" in normalized:
         head, _, tail = normalized.partition("/")
         clause = (tail or "").strip()
         if not clause:
-            return normalized
+            return "положения"
         if clause.lower().startswith(("п.", "п ", "ст.", "ст ", "ч.", "ч ", "табл", "прил")):
             return clause
+        # словесные метки curated («склад», «тц») — не выдаём как «п. склад»
+        if _WORD_ONLY_SECTION.fullmatch(clause) and not any(ch.isdigit() for ch in clause):
+            return "положения"
         if "фз" in head.lower() or re.search(r"\b123\b", head):
             return f"ст. {clause}"
+        if clause.lower().startswith("табл") or "табл" in clause.lower():
+            return clause if clause.lower().startswith("табл") else f"табл. {clause}"
         return f"п. {clause}"
     lowered = normalized.lower()
     if lowered.startswith(("п.", "п ", "ст.", "ст ", "ч.", "ч ", "табл", "прил")):
         return normalized
+    if _WORD_ONLY_SECTION.fullmatch(normalized) and not any(ch.isdigit() for ch in normalized):
+        return "положения"
     return f"п. {normalized}"
 
 
@@ -959,6 +989,10 @@ def _format_item_source(citation: str, source_level: str, region_code: str) -> s
     """Цитата: сначала пункт/статья, затем наименование НПА (без уровня и ссылок)."""
     npa = _npa_after_clause(_full_npa_for_item(citation, source_level, region_code))
     punkt = _punkt_label(citation)
+    if punkt == _CLAUSE_MISSING:
+        return f"({_esc(npa)}; {_esc(punkt)})"
+    if punkt == "положения":
+        return f"({_esc(punkt)} {_esc(npa)})"
     return f"({_esc(punkt)} {_esc(npa)})"
 
 
@@ -974,7 +1008,12 @@ def _format_compare_side(
     else:
         npa = get_region(region_code).document_title
     region = get_region(region_code)
-    cite = f"{_esc(_punkt_label(citation))} {_esc(_npa_after_clause(npa))}"
+    punkt = _punkt_label(citation)
+    npa_g = _npa_after_clause(npa)
+    if punkt == _CLAUSE_MISSING:
+        cite = f"{_esc(npa_g)}; {_esc(punkt)}"
+    else:
+        cite = f"{_esc(punkt)} {_esc(npa_g)}"
     return (
         f"  {side_emoji} <b>{_esc(region.display_name)}</b> "
         f"({cite}): {_esc(_humanize_missing_value(value))}"
@@ -1008,7 +1047,9 @@ def _render_item_bullets(items: list[RequirementItem], region_code: str) -> list
         for item in specific_items:
             source = _format_item_source(item.citation, item.source_level, region_code)
             lines.append(f"• {_esc(item.description)} {source}")
-        lines.append("Плюс действуют общие нормы:")
+        lines.append(
+            "\n<b>Дополнительно применяются следующие общие нормы:</b>"
+        )
         for item in general_items:
             source = _format_item_source(item.citation, item.source_level, region_code)
             lines.append(f"• {_esc(item.description)} {source}")
@@ -1037,8 +1078,8 @@ def _render_level_by_category(
         general = [item for item in category_items if not item.is_specific]
         if not specific and general:
             lines.append(
-                f"Специальных требований к «{_esc(business_type)}» здесь нет, "
-                f"но применяются общие нормы:"
+                f"Специальных требований к «{_esc(_display_business_type(business_type))}» "
+                f"в данной категории не установлено; применяются следующие общие нормы:"
             )
         lines.extend(_render_item_bullets(category_items, region_code))
     return lines
@@ -1143,7 +1184,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
 
     # сначала различия, потом совпадения (только конкретные)
     if differences:
-        lines.append("\n<b>Чем отличаются</b>")
+        lines.append("\n<b>Чем отличаются:</b>")
         groups = _group_by_category(differences)
         diff_number = 1
         for category in get_settings().requirement_categories:
@@ -1180,12 +1221,12 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                 )
                 diff_number += 1
     else:
-        lines.append("\n<b>Чем отличаются</b>\nРазличий не обнаружено.")
+        lines.append("\n<b>Чем отличаются:</b>\nРазличий не обнаружено.")
 
     if commons:
-        lines.append("\n<b>Что совпадает</b>")
+        lines.append("\n<b>Что совпадает:</b>")
         lines.append(
-            "Эти требования совпадают или одинаково опираются на федеральные нормы:"
+            "Следующие требования совпадают либо одинаково опираются на федеральные нормы:"
         )
         for index, item in enumerate(commons, start=1):
             source_code = FEDERAL_CODE if item.source_level == "федеральный" else comparison.region_a
@@ -1201,13 +1242,33 @@ def _render_comparison(comparison: ComparisonResult) -> str:
     return "\n".join(lines)
 
 
+def _polish_response_text(text: str) -> str:
+    """Связные переходы между регионами и отсечение артефактов (длинные списки чисел)."""
+    cleaned = text or ""
+    # «…центров; в Республике…» → «…центров. А в Республике…»
+    cleaned = re.sub(r";\s*в\s+", ". А в ", cleaned)
+    cleaned = re.sub(r";\s*а\s+в\s+", ". А в ", cleaned, flags=re.IGNORECASE)
+    # убрать гигантские перечни чисел
+    cleaned = _NUMBER_LIST_ARTIFACT_RE.sub("\n", cleaned)
+    # остатки «фрагмент» в пользовательском тексте
+    cleaned = re.sub(
+        r"номер пункта в доступных фрагментах не приведён",
+        _CLAUSE_MISSING,
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def format_response(state: AgentState) -> AgentState:
     if state.get("error"):
         return {**state, "response_text": f"Не удалось получить ответ: {_esc(state['error'])}"}
 
     prefix = ""
+    display_type = _display_business_type(state.get("business_type") or "")
     if state.get("business_type_raw"):
-        prefix = f"<i>Тип объекта: «{_esc(state['business_type'])}»</i>\n\n"
+        prefix = f"<i>Тип объекта: «{_esc(display_type)}»</i>\n\n"
 
     if state["mode"] == "info" and state.get("extraction"):
         body = _render_extraction(state["extraction"])
@@ -1215,6 +1276,8 @@ def format_response(state: AgentState) -> AgentState:
         body = _render_comparison(state["comparison"])
     else:
         return {**state, "response_text": "Не удалось сформировать ответ по имеющимся данным."}
+
+    body = _polish_response_text(body)
 
     from app.agent.guardrail import build_refusal, claim_numbers_supported
 

@@ -14,6 +14,14 @@ def test_detect_plot_area_aspect() -> None:
     assert aspects[0].key == "plot_area"
 
 
+def test_detect_plot_area_norms_po_uchastku() -> None:
+    aspects = detect_aspects(
+        "Нормы по участку для складских зданий в Свердловской области???"
+    )
+    assert len(aspects) == 1
+    assert aspects[0].key == "plot_area"
+
+
 def test_plain_warehouse_not_plot_aspect() -> None:
     assert detect_aspects("склад") == []
 
@@ -36,3 +44,20 @@ def test_plot_area_unsupported_without_evidence() -> None:
     )
     assert "площади" in msg.lower() or "участк" in msg.lower()
     assert "ПЗЗ" in msg
+
+
+def test_plot_area_unsupported_for_uchastok_synonym() -> None:
+    aspects = detect_aspects("Нормы по участку для складских зданий")
+    chunks = [
+        RetrievedChunk(
+            id="1",
+            text="Расчётные показатели обеспеченности территории для складов "
+            "устанавливаются региональными нормативами. Специальные нормы "
+            "по пожарной безопасности применяются федеральные.",
+            region_code="RU-SVE",
+            section_number="склад",
+            category=None,
+            distance=0.1,
+        )
+    ]
+    assert not aspects_supported(aspects, chunks)
