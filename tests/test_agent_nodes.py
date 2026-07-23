@@ -15,7 +15,7 @@ from app.vectorstore.types import RetrievedChunk
 
 def test_understand_query_requires_business_type() -> None:
     state = nodes.understand_query({"business_type": "", "region_a": "moscow_oblast"})
-    assert "Не указан тип бизнес-объекта" in state["error"]
+    assert "Не указан тип объекта капитального строительства" in state["error"]
 
 
 def test_understand_query_requires_region() -> None:
@@ -166,10 +166,10 @@ def test_esc_escapes_html_special_characters() -> None:
 
 
 def test_category_label_uses_friendly_names_with_fallback() -> None:
-    assert nodes._category_label("сроки_и_документы") == "Сроки и документы"
-    assert nodes._category_label("градостроительные") == "Градостроительные нормы"
-    assert nodes._category_label("пожарная_безопасность") == "Пожарная безопасность"
-    assert nodes._category_label("непонятная_категория") == "Непонятная категория"
+    assert nodes._category_label("сроки_и_документы") == "Сроки и документы:"
+    assert nodes._category_label("градостроительные") == "Градостроительные нормы:"
+    assert nodes._category_label("пожарная_безопасность") == "Пожарная безопасность:"
+    assert nodes._category_label("непонятная_категория") == "Непонятная категория:"
 
 
 def test_group_by_category_groups_items_by_category() -> None:
@@ -219,13 +219,13 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "Федеральный уровень" in text
     assert "Региональный уровень" in text
     assert "Наличие требований по объекту" not in text
-    assert "Сроки и документы" in text
+    assert "Сроки и документы:" in text
     assert "п. 3.2" in text
     assert "713/30" in text
     assert "открыть первоисточник" not in text
     assert "первоисточник" not in text
     assert "По остальным категориям данные не найдены" not in text
-    assert "Что требуется проверить дополнительно" in text
+    assert "Что требуется проверить дополнительно:" in text
     assert "только учусь" not in text  # дисклеймер в format_response
     assert "объекту капитального строительства" in text
     assert "региональный:" not in text
@@ -345,7 +345,7 @@ def test_render_extraction_shows_specific_and_general_separately() -> None:
     text = nodes._render_extraction(extraction)
 
     assert "Спец. норма про склады" in text
-    assert "Плюс действуют общие нормы" in text
+    assert "Дополнительно применяются следующие общие нормы" in text
     assert "Общая норма про сроки" in text
 
 
@@ -378,10 +378,10 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
     assert "Требования почти совпадают" in text
     assert "в Московской области" in text
     assert "в Краснодарском крае" in text
-    assert "Что совпадает" in text
-    assert "Чем отличаются" in text
+    assert "Что совпадает:" in text
+    assert "Чем отличаются:" in text
     # различия идут раньше совпадений
-    assert text.index("Чем отличаются") < text.index("Что совпадает")
+    assert text.index("Чем отличаются:") < text.index("Что совпадает:")
     assert "1. Парковки" in text
     assert "1. Срок выдачи отличается" in text
     assert "10 дней" in text
@@ -398,7 +398,7 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
     assert "первоисточник" not in text
     assert "🔵" not in text
     assert "🟢" not in text
-    assert "Что требуется проверить дополнительно" in text
+    assert "Что требуется проверить дополнительно:" in text
     # пункт перед названием НПА
     assert "п. 3.2 Постановления" in text or "п. 3.2" in text
 
@@ -444,10 +444,37 @@ def test_render_comparison_humanizes_missing_fragment_phrase() -> None:
 
     assert "предоставленных фрагментах" not in text
     assert (
-        "региональные требования отсутствуют" in text
-        or "в нормативе региона не указано" in text
+        "в нормативе субъекта соответствующие требования не установлены" in text
+        or "региональные требования по данному параметру отсутствуют" in text
     )
-    assert "номер пункта в доступных фрагментах не приведён" in text
+    assert "номер пункта в доступных фрагментах не приведён" not in text
+    assert "реквизиты структурной единицы акта" in text
+
+
+def test_punkt_label_word_curated_not_fake_clause() -> None:
+    assert nodes._punkt_label("СО-доп/склад") == "положения"
+    assert "п. склад" not in nodes._format_item_source(
+        "СО-доп/склад", "региональный", "sverdlovsk_oblast"
+    )
+
+
+def test_display_business_type_expands_tc() -> None:
+    assert nodes._display_business_type("тц") == "торговый центр"
+    assert "торговый центр" in nodes._greeting_for_info("тц", "Московской области")
+
+
+def test_polish_response_fixes_semicolon_region_glue() -> None:
+    text = nodes._polish_response_text(
+        "доступность для торговых центров; в Республике Татарстан требования отсутствуют"
+    )
+    assert "; в" not in text
+    assert "А в Республике" in text
+
+
+def test_polish_response_strips_number_list_artifact() -> None:
+    junk = "Норма.\n" + ", ".join(str(i) for i in range(1, 40)) + "\nКонец."
+    cleaned = nodes._polish_response_text(junk)
+    assert "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12" not in cleaned
 
 
 def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> None:
