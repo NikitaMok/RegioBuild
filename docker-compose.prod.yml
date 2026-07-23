@@ -1,0 +1,174 @@
+# Прод на одном VPS (Aeza и т.п.): nginx → api (+ опционально второй api), bot, prometheus, alertmanager, weekly backup.
+# Запуск: docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# Второй инстанс API (нагрузка / запас): COMPOSE_PROFILES=ha docker compose -f docker-compose.prod.yml --env-file .env up -d
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "3000:80"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_ROLE: api
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/regiobuild.db}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gigachat}
+      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Pro}
+      GIGACHAT_VERIFY_SSL_CERTS: ${GIGACHAT_VERIFY_SSL_CERTS:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      VECTOR_BACKEND: qdrant
+      QDRANT_URL: ${QDRANT_URL}
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-regiobuild_normative}
+      EMBEDDING_BACKEND: fastembed
+      DEPLOY_PROFILE: bothost-demo
+      WARMUP_ON_START: ${WARMUP_ON_START:-off}
+      API_AUTH_ENABLED: ${API_AUTH_ENABLED:-false}
+      LLM_CACHE_ENABLED: ${LLM_CACHE_ENABLED:-true}
+      LLM_CACHE_SIZE: ${LLM_CACHE_SIZE:-2048}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      GRAFANA_CLOUD_PROMETHEUS_URL: ${GRAFANA_CLOUD_PROMETHEUS_URL:-}
+      GRAFANA_CLOUD_PROMETHEUS_USER: ${GRAFANA_CLOUD_PROMETHEUS_USER:-}
+      GRAFANA_CLOUD_PROMETHEUS_TOKEN: ${GRAFANA_CLOUD_PROMETHEUS_TOKEN:-}
+    volumes:
+      - app_data:/app/data
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=5)"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 90s
+
+  # Второй API на том же хосте (профиль ha). На 8 GB включайте осознанно — fastembed в каждом контейнере.
+  api2:
+    profiles: ["ha"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_ROLE: api
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/regiobuild.db}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gigachat}
+      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Pro}
+      GIGACHAT_VERIFY_SSL_CERTS: ${GIGACHAT_VERIFY_SSL_CERTS:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      VECTOR_BACKEND: qdrant
+      QDRANT_URL: ${QDRANT_URL}
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-regiobuild_normative}
+      EMBEDDING_BACKEND: fastembed
+      DEPLOY_PROFILE: bothost-demo
+      WARMUP_ON_START: "off"
+      API_AUTH_ENABLED: ${API_AUTH_ENABLED:-false}
+      LLM_CACHE_ENABLED: ${LLM_CACHE_ENABLED:-true}
+      LLM_CACHE_SIZE: ${LLM_CACHE_SIZE:-2048}
+    volumes:
+      - app_data:/app/data
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=5)"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 90s
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_ROLE: bot
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      API_BASE_URL: http://nginx
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      nginx:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    expose:
+      - "9090"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    expose:
+      - "9093"
+    depends_on:
+      - prometheus
+
+  # Еженедельный бэкап SQLite (+ LLM cache) в volume app_data/backups
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/regiobuild.db}
+      BACKUP_KEEP: ${BACKUP_KEEP:-8}
+      BACKUP_ROOT: /app/data/backups
+      VECTOR_BACKEND: qdrant
+      EMBEDDING_BACKEND: fastembed
+      WARMUP_ON_START: "off"
+      CHROMA_PERSIST_DIR: /tmp/chroma-unused
+    volumes:
+      - app_data:/app/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "weekly backup loop"
+        while true; do
+          python -m scripts.backup --keep "$${BACKUP_KEEP:-8}" || true
+          sleep 604800
+        done
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  app_data:
+  prometheus_data:

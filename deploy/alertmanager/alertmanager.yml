@@ -1,0 +1,35 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = critical
+      receiver: critical
+      repeat_interval: 1h
+
+receivers:
+  # По умолчанию — без внешних вызовов (чтобы стек поднимался без секретов).
+  - name: default
+    webhook_configs: []
+
+  # Critical: webhook (Telegram/Slack/n8n). Задайте ALERT_WEBHOOK_URL в .env и
+  # пересоберите конфиг через scripts/render_alertmanager_config.sh при деплое,
+  # либо подставьте URL вручную в этот файл на сервере (не коммитить секреты).
+  - name: critical
+    webhook_configs:
+      - url: "http://127.0.0.1:9/regiobuild-alerts"
+        send_resolved: true
+        max_alerts: 10
+
+inhibit_rules:
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: ["alertname"]

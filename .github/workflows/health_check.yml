@@ -1,0 +1,33 @@
+name: Health check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ secrets.HEALTH_URL != '' }}
+    steps:
+      - name: GET /health
+        env:
+          HEALTH_URL: ${{ secrets.HEALTH_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.ALERT_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.ALERT_TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -o /tmp/health.body -w "%{http_code}" -m 25 "$HEALTH_URL" || echo "000")
+          BODY=$(cat /tmp/health.body 2>/dev/null || true)
+          echo "HTTP $CODE body=$BODY"
+          if [ "$CODE" != "200" ] || ! echo "$BODY" | grep -qi ok; then
+            MSG="RegioBuild health FAIL code=$CODE url=$HEALTH_URL body=$BODY"
+            echo "$MSG"
+            if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+              curl -sS -m 15 -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                -d chat_id="$TELEGRAM_CHAT_ID" \
+                --data-urlencode "text=$MSG" || true
+            fi
+            exit 1
+          fi

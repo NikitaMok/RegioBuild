@@ -1,0 +1,33 @@
+groups:
+  - name: regiobuild
+    rules:
+      - alert: RegioBuildApiDown
+        expr: up{job="regiobuild-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RegioBuild API не отдаёт /metrics"
+          description: "Инстанс API недоступен для Prometheus scrapes более 2 минут."
+
+      - alert: RegioBuildHigh5xx
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+          clamp_min(sum(rate(http_requests_total[5m])), 0.001)
+            > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая доля HTTP 5xx у RegioBuild"
+          description: "Доля 5xx > 5% за 10 минут."
+
+      - alert: RegioBuildGuardrailSpike
+        expr: increase(regiobuild_guardrail_blocks_total[15m]) > 20
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Всплеск блокировок guardrail"
+          description: "Более 20 блокировок guardrail за 15 минут."
