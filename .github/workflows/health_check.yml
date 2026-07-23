@@ -9,7 +9,6 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: ${{ secrets.HEALTH_URL != '' }}
     steps:
       - name: GET /health
         env:
@@ -18,6 +17,11 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.ALERT_TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
+          if [ -z "${HEALTH_URL:-}" ]; then
+            echo "HEALTH_URL не задан в secrets репозитория — проверка пропущена."
+            echo "Добавьте Secrets → HEALTH_URL (например http://IP:3000/health)."
+            exit 0
+          fi
           CODE=$(curl -sS -o /tmp/health.body -w "%{http_code}" -m 25 "$HEALTH_URL" || echo "000")
           BODY=$(cat /tmp/health.body 2>/dev/null || true)
           echo "HTTP $CODE body=$BODY"
@@ -31,3 +35,4 @@ jobs:
             fi
             exit 1
           fi
+          echo "health OK"
