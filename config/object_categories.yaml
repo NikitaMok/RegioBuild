@@ -14,22 +14,23 @@ objects:
   автосервис: [parking, fire, sanitary, setback]
   азс: [fire, sanitary, setback, parking]
   автозаправка: [fire, sanitary, setback, parking]
-  склад: [sanitary, fire, parking, setback]
-  складской комплекс: [sanitary, fire, parking]
-  торговый центр: [parking, fire, accessibility, sanitary]
-  тц: [parking, fire, accessibility]
-  магазин: [parking, fire, accessibility]
-  офис: [parking, height, setback, fire, accessibility]
-  офисное здание: [parking, height, setback, fire, accessibility]
+  склад: [sanitary, fire, parking, setback, evacuation]
+  складской комплекс: [sanitary, fire, parking, evacuation]
+  торговый центр: [parking, fire, accessibility, sanitary, evacuation]
+  тц: [parking, fire, accessibility, evacuation]
+  магазин: [parking, fire, accessibility, sanitary]
+  офис: [parking, height, setback, fire, accessibility, networks, evacuation]
+  офисное здание: [parking, height, setback, fire, accessibility, networks, evacuation]
+  административное здание: [parking, height, setback, fire, accessibility, networks, evacuation]
   кафе: [parking, sanitary, fire, accessibility]
   ресторан: [parking, sanitary, fire]
-  гостиница: [parking, fire, sanitary, accessibility]
-  отель: [parking, fire, sanitary]
-  медицинский центр: [parking, sanitary, fire, accessibility]
+  гостиница: [parking, fire, sanitary, accessibility, evacuation]
+  отель: [parking, fire, sanitary, evacuation]
+  медицинский центр: [parking, sanitary, fire, accessibility, evacuation]
   медцентр: [parking, sanitary, fire]
-  производство: [fire, sanitary, setback, parking]
-  цех: [fire, sanitary, setback]
-  завод: [fire, sanitary, setback]
+  производство: [fire, sanitary, setback, parking, networks, docs]
+  цех: [fire, sanitary, setback, parking]
+  завод: [fire, sanitary, setback, parking]
 
 category_queries:
   parking: "парковка машино-места стоянка"
@@ -37,6 +38,43 @@ category_queries:
   setback: "отступ разрыв расстояние до границ"
   sanitary: "санитарно-защитная зона СанПиН"
   fire: "пожарная безопасность противопожарные расстояния 123-ФЗ"
+  evacuation: "эвакуационные пути и выходы при пожаре"
   accessibility: "пешеходная доступность подходы"
+  networks: "инженерные сети технологическое присоединение"
+  docs: "документация планировка территории градплан"
   landscaping: "озеленение благоустройство"
   general: "размещение требования"
+
+# Семантические формулировки юриста (не копируют текст curated и не содержат «50/100 м»).
+object_query_extras:
+  азс:
+    - "санитарно-защитная зона автозаправочных станций"
+    - "хранение горючих жидкостей пожарная опасность"
+  автозаправка:
+    - "санитарно-защитная зона автозаправочных станций"
+  кафе:
+    - "санитарные требования к объектам общественного питания"
+  ресторан:
+    - "санитарные требования к объектам общественного питания"
+  торговый центр:
+    - "классификация зданий торговых объектов по пожарной опасности"
+    - "эвакуация людей из зданий торгового назначения"
+  тц:
+    - "эвакуация людей из зданий торгового назначения"
+  офис:
+    - "эвакуация из административных и офисных зданий"
+    - "требования пожарной безопасности к объектам защиты"
+  административное здание:
+    - "эвакуация из административных и офисных зданий"
+  склад:
+    - "эвакуация из складских зданий"
+    - "противопожарные расстояния для складских объектов"
+  производство:
+    - "классы опасности предприятий и санитарно-защитные зоны"
+    - "противопожарные расстояния производственных зданий"
+  цех:
+    - "классы опасности предприятий и санитарно-защитные зоны"
+  гостиница:
+    - "эвакуация из зданий гостиниц"
+  медицинский центр:
+    - "размещение лечебно-профилактических учреждений"

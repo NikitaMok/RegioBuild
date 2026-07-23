@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -11,3 +11,5 @@ class RetrievedChunk:
     section_number: str | None
     category: str | None
     distance: float
+    tags: list[str] = field(default_factory=list)
+    doc_type: str = ""

@@ -113,10 +113,19 @@ class QdrantStore:
         region_iso: str | None = None,
         include_federal: bool = True,
         top_k: int = 20,
+        doc_type: str | None = None,
+        tag: str | None = None,
     ) -> list[dict[str, Any]]:
         from qdrant_client.http import models as qm
 
-        must_active = qm.FieldCondition(key="is_active", match=qm.MatchValue(value=True))
+        must: list = [qm.FieldCondition(key="is_active", match=qm.MatchValue(value=True))]
+        if doc_type:
+            must.append(
+                qm.FieldCondition(key="doc_type", match=qm.MatchValue(value=doc_type))
+            )
+        if tag:
+            must.append(qm.FieldCondition(key="tags", match=qm.MatchValue(value=tag)))
+
         should: list = []
         if region_iso and region_iso != "RU-FED":
             should.append(
@@ -128,15 +137,9 @@ class QdrantStore:
                     key="regulatory_level", match=qm.MatchValue(value="federal")
                 )
             )
-        if not should:
-            query_filter = qm.Filter(must=[must_active])
-        else:
-            query_filter = qm.Filter(
-                must=[
-                    must_active,
-                    qm.Filter(should=should),
-                ]
-            )
+        if should:
+            must.append(qm.Filter(should=should))
+        query_filter = qm.Filter(must=must)
 
         hits = self._client.search(
             collection_name=self.collection,

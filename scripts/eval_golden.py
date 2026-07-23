@@ -176,7 +176,7 @@ def run(golden_path: Path, mode: str, limit: int | None, json_out: Path | None) 
         logger.info(f"отчёт: {json_out}")
 
     threshold_ok = (
-        report.get("hit_rate", 0) >= 0.8 if mode == "retrieval" else report.get("ok_rate", 0) >= 0.6
+        report.get("hit_rate", 0) >= 0.95 if mode == "retrieval" else report.get("ok_rate", 0) >= 0.6
     )
     return 0 if threshold_ok else 1
 

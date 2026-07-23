@@ -483,6 +483,85 @@ def test_section_rank_quality_prefers_dotted_over_table_junk() -> None:
     assert nodes._section_rank_quality("5.5.153") > nodes._section_rank_quality("1")
     assert nodes._section_rank_quality("табл.108") > nodes._section_rank_quality("300")
     assert nodes._section_rank_quality("СанПиН/7.1.3") >= nodes._section_rank_quality("5.5.153")
+    assert nodes._section_rank_quality("НО-доп/2") > nodes._section_rank_quality("1/е")
+    assert nodes._section_rank_quality("а/в") == 0
+    assert nodes._section_rank_quality("табл.108") > nodes._section_rank_quality("табл.p104.1")
+
+
+def test_type_affinity_prefers_matching_curated_tags() -> None:
+    azs = RetrievedChunk(
+        id="curated::RU-FED::СанПиН/7.1.5",
+        text="АЗС СЗЗ 100 м",
+        region_code="RU-FED",
+        section_number="СанПиН/7.1.5",
+        category=None,
+        distance=0.2,
+        tags=["азс"],
+        doc_type="CURATED",
+    )
+    warehouse = RetrievedChunk(
+        id="curated::RU-MOS::МО-доп/склад",
+        text="складские объекты",
+        region_code="RU-MOS",
+        section_number="МО-доп/склад",
+        category=None,
+        distance=0.05,
+        tags=["склад"],
+        doc_type="CURATED",
+    )
+    generic = RetrievedChunk(
+        id="curated::RU-FED::СанПиН/2.1",
+        text="определение СЗЗ",
+        region_code="RU-FED",
+        section_number="СанПиН/2.1",
+        category=None,
+        distance=0.01,
+        tags=["азс", "склад", "торговый центр"],
+        doc_type="CURATED",
+    )
+    assert nodes._type_affinity(azs, "азс") > nodes._type_affinity(warehouse, "азс")
+    assert nodes._type_affinity(azs, "азс") > nodes._type_affinity(generic, "азс")
+
+
+def test_weak_retrieval_support_refuses_sparse_noise() -> None:
+    junk = [
+        RetrievedChunk(
+            id="j1",
+            text="общий текст без опоры",
+            region_code="RU-FED",
+            section_number="8.125",
+            category=None,
+            distance=0.3,
+        )
+    ]
+    assert nodes._weak_retrieval_support(junk, [], [])
+    curated = [
+        RetrievedChunk(
+            id="curated::RU-FED::СанПиН/7.1.5",
+            text="АЗС СЗЗ",
+            region_code="RU-FED",
+            section_number="СанПиН/7.1.5",
+            category=None,
+            distance=0.1,
+            tags=["азс"],
+            doc_type="CURATED",
+        ),
+        RetrievedChunk(
+            id="c2",
+            text="ещё фрагмент",
+            region_code="RU-FED",
+            section_number="12.4.4",
+            category=None,
+            distance=0.2,
+        ),
+    ]
+    assert not nodes._weak_retrieval_support([], curated, [])
+
+
+def test_resolve_retrieval_type_from_paraphrase() -> None:
+    assert nodes._resolve_retrieval_type("цех металлообработки") == "производство"
+    assert nodes._resolve_retrieval_type("административное здание делового центра") == "офис"
+    assert nodes._resolve_retrieval_type("ТРЦ с фудкортом") == "торговый центр"
 
 
 def test_citation_rejects_prefix_against_ambiguous_section_one() -> None:

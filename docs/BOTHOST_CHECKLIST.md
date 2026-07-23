@@ -7,23 +7,28 @@ Embeddings на Bothost: **fastembed (ONNX)**, без PyTorch. В образе `
 (фоновый прогрев на Bothost часто подвешивает процесс). Модель поднимается на
 первом запросе; `/health` должен отвечать сразу после старта uvicorn.
 
+**Порт:** uvicorn и «Порт веб-приложения» в панели = **3000** (`PORT=3000`).
+Bothost support: 8000 ломает роутинг Traefik (снаружи 504 при живом uvicorn).
+
 Индекс Qdrant должен быть построен тем же backend (`EMBEDDING_BACKEND=fastembed`).
 
 ## Порядок после пуша
 
-1. При смене embedding backend — локально переиндексировать Qdrant Cloud:
+1. В панели API: порт веб-приложения **3000**, в env `PORT=3000`.
+2. При смене embedding backend — локально переиндексировать Qdrant Cloud:
    `EMBEDDING_BACKEND=fastembed python -m scripts.index_qdrant`
-2. Recreate **только API** (`SERVICE_ROLE=api`).
-3. Дождаться `/health` → `{"status":"ok"}` (не запускать два тяжёлых Sync сразу).
-4. В логах warmup: `backend=fastembed`, число векторов.
-5. Recreate **bot** (`SERVICE_ROLE=bot`) с новым `API_BASE_URL`.
-6. Smoke: `python -m scripts.smoke_wave1_prod --api-url https://bot-…-….bothost.tech`
+3. Recreate **только API** (`SERVICE_ROLE=api`).
+4. Дождаться `/health` → `{"status":"ok"}` (не запускать два тяжёлых Sync сразу).
+5. В логах: `starting api on 0.0.0.0:3000`, warmup `backend=fastembed`.
+6. Recreate **bot** (`SERVICE_ROLE=bot`) с новым `API_BASE_URL`.
+7. Smoke: `python -m scripts.smoke_wave1_prod --api-url https://bot-…-….bothost.tech`
 
 ## Env — API
 
 | Переменная | Значение |
 |------------|----------|
 | `SERVICE_ROLE` | `api` |
+| `PORT` | `3000` (совпадает с портом веб-приложения в панели) |
 | `DATABASE_URL` | sqlite/файл на volume, который не затирается |
 | `LLM_PROVIDER` | `gigachat` |
 | креды GigaChat | из кабинета GigaChat Pro |

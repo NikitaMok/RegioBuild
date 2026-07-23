@@ -29,7 +29,7 @@
 Положить в локальный `.env` / `bothost-api.env` (**не коммитить**).
 
 Enterprise compose может поднять Grafana Alloy sidecar, который читает
-`http://api:8000/metrics` и пушит в Cloud.
+`http://api:3000/metrics` и пушит в Cloud.
 
 ## Дашборд RegioBuild Ops (минимальный набор панелей)
 

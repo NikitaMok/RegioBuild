@@ -28,7 +28,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "3000:3000"
     volumes:
       - ./data:/srv/app/data
 

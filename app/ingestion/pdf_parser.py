@@ -29,21 +29,33 @@ _CLAUSE_LINE = re.compile(
     re.IGNORECASE,
 )
 _SUBPOINT = re.compile(r"^([а-яa-z])\)\s+(.+)$", re.IGNORECASE)
+# «часть» статьи — не глава; глава/раздел отдельно
 _CHAPTER = re.compile(
-    r"^(?:глава|раздел|часть)\s+([IVXLC\d]+|[А-ЯA-Z\d\.]+)[\.\s:—-]*(.*)$",
+    r"^(?:глава|раздел)\s+([IVXLC\d]+|[А-ЯA-Z\d\.]+)[\.\s:—-]*(.*)$",
+    re.IGNORECASE,
+)
+_PART = re.compile(
+    r"^часть\s+(\d+(?:\.\d+)*)[\.\s:—-]*(.*)$",
     re.IGNORECASE,
 )
 _ARTICLE = re.compile(
     r"^(?:статья|ст\.)\s*(\d+(?:\.\d+)*)[\.\s:—-]*(.*)$",
     re.IGNORECASE,
 )
-_TABLE_TITLE = re.compile(r"таблица\s+(\d+[а-яa-z]?)", re.IGNORECASE)
+_TABLE_TITLE = re.compile(
+    r"таблица\s+(?:[nN№#]\s*)?(\d+(?:\.\d+)*[а-яa-z]?)",
+    re.IGNORECASE,
+)
+# как в DOCX parser: колонки таблиц ≠ пункты НПА
+_TABLE_ROW_AFTER_NUMBER = re.compile(r"^\|")
+_TABLE_CELLS = re.compile(r"\s\|\s")
 
 
 @dataclass
 class Hierarchy:
     chapter: str = ""
     article: str = ""
+    part: str = ""
     paragraph: str = ""
     subpoint: str = ""
 
@@ -126,6 +138,28 @@ def _normalize_line(line: str) -> str:
     return re.sub(r"\s+", " ", (line or "").replace("\u00a0", " ")).strip()
 
 
+def _is_real_clause_header(number: str, rest: str) -> bool:
+    """Отсекает титульную/табличную нумерацию, которую regex путает с пунктами."""
+    cleaned = (rest or "").strip()
+    if not cleaned:
+        return False
+    if _TABLE_ROW_AFTER_NUMBER.match(cleaned) or cleaned.startswith("|"):
+        return False
+    if _TABLE_CELLS.search(cleaned):
+        return False
+    # голые 100+ без точки — часто ячейки таблиц / колонтитулы
+    if "." not in number and number.isdigit() and int(number) >= 100:
+        return False
+    # «1. Текст» на титуле с одной цифрой и очень коротким хвостом — шум
+    if "." not in number and number in {"1", "2", "3"} and len(cleaned) < 12:
+        return False
+    return True
+
+
+def _looks_like_table_row(line: str) -> bool:
+    return bool(_TABLE_CELLS.search(line) or line.strip().startswith("|"))
+
+
 def _table_to_text(table: list[list[str | None]] | None) -> str:
     if not table:
         return ""
@@ -177,8 +211,8 @@ def extract_pdf_tables(path: Path) -> list[tuple[int, str]]:
     return tables
 
 
-def parse_pdf_to_structured(
-    path: Path,
+def parse_lines_to_structured(
+    lines: list[tuple[int, str]],
     *,
     doc_id: str,
     doc_name: str,
@@ -186,18 +220,20 @@ def parse_pdf_to_structured(
     regulatory_level: str,
     doc_type: str,
     doc_version: str,
+    page_tables: list[tuple[int, str]] | None = None,
 ) -> StructuredDocument:
-    """Rule-based разбор PDF на clauses с иерархией."""
-    lines = extract_pdf_lines(path)
-    page_tables = extract_pdf_tables(path)
+    """Разбор уже извлечённых строк PDF (+ опционально pdfplumber-таблицы)."""
+    # pdfplumber-таблицы: не клеим все на первый пункт страницы —
+    # держим очередь и отдаём ближайшему пункту/заголовку таблицы, иначе orphan.
     tables_by_page: dict[int, list[str]] = {}
-    for page, table_text in page_tables:
+    for page, table_text in page_tables or []:
         tables_by_page.setdefault(page, []).append(table_text)
 
     hierarchy = Hierarchy()
     clauses: list[StructuredClause] = []
     current: StructuredClause | None = None
     tables_attached = 0
+    active_table_id: str | None = None
 
     def flush() -> None:
         nonlocal current
@@ -205,10 +241,45 @@ def parse_pdf_to_structured(
             clauses.append(current)
         current = None
 
+    def attach_pending_pdf_tables(page: int, target: StructuredClause) -> None:
+        nonlocal tables_attached
+        pending = tables_by_page.pop(page, [])
+        if not pending:
+            return
+        # максимум одна «ближайшая» pdfplumber-таблица к пункту; остальное — orphan
+        first, *rest = pending
+        if target.table_text:
+            target.table_text = f"{target.table_text} || {first}"
+        else:
+            target.table_text = first
+        tables_attached += 1
+        if rest:
+            tables_by_page[page] = rest
+
+    def start_table_clause(table_id: str, page: int, title_line: str) -> None:
+        nonlocal current, tables_attached, active_table_id
+        flush()
+        active_table_id = table_id
+        current = StructuredClause(
+            clause_number=table_id,
+            text=title_line,
+            hierarchy=Hierarchy(
+                chapter=hierarchy.chapter,
+                article=hierarchy.article,
+                part=hierarchy.part,
+                paragraph="",
+                subpoint="",
+            ),
+            page=page,
+        )
+        attach_pending_pdf_tables(page, current)
+        tables_attached += 1  # текстовый заголовок таблицы тоже считаем
+
     for page, line in lines:
         chapter_m = _CHAPTER.match(line)
         if chapter_m:
             flush()
+            active_table_id = None
             hierarchy = Hierarchy(
                 chapter=_normalize_line(f"Глава {chapter_m.group(1)} {chapter_m.group(2)}".strip())
             )
@@ -217,19 +288,37 @@ def parse_pdf_to_structured(
         article_m = _ARTICLE.match(line)
         if article_m:
             flush()
+            active_table_id = None
             hierarchy.article = _normalize_line(
                 f"Статья {article_m.group(1)} {article_m.group(2)}".strip()
+            )
+            hierarchy.part = ""
+            hierarchy.paragraph = ""
+            hierarchy.subpoint = ""
+            continue
+
+        part_m = _PART.match(line)
+        if part_m:
+            flush()
+            active_table_id = None
+            hierarchy.part = _normalize_line(
+                f"Часть {part_m.group(1)} {part_m.group(2)}".strip()
             )
             hierarchy.paragraph = ""
             hierarchy.subpoint = ""
             continue
 
         table_m = _TABLE_TITLE.search(line)
+        if table_m:
+            start_table_clause(f"табл.{table_m.group(1)}", page, line)
+            continue
+
         clause_m = _CLAUSE_LINE.match(line)
         sub_m = _SUBPOINT.match(line)
 
-        if clause_m:
+        if clause_m and _is_real_clause_header(clause_m.group(1), clause_m.group(2)):
             flush()
+            active_table_id = None
             number = clause_m.group(1)
             rest = clause_m.group(2)
             hierarchy.paragraph = f"Пункт {number}"
@@ -240,27 +329,22 @@ def parse_pdf_to_structured(
                 hierarchy=Hierarchy(
                     chapter=hierarchy.chapter,
                     article=hierarchy.article,
+                    part=hierarchy.part,
                     paragraph=hierarchy.paragraph,
                     subpoint="",
                 ),
                 page=page,
             )
-            # привязать таблицы с этой страницы один раз
-            pending = tables_by_page.pop(page, [])
-            if pending:
-                current.table_text = " || ".join(pending)
-                tables_attached += len(pending)
+            attach_pending_pdf_tables(page, current)
             continue
 
-        if sub_m and current:
+        if sub_m and current and not (current.clause_number or "").startswith("табл."):
             letter, rest = sub_m.group(1), sub_m.group(2)
             parent_number = current.clause_number.split("/")[0] if current.clause_number else ""
-            # если текущий — уже подпункт, закрываем и открываем соседний
             if "/" in (current.clause_number or ""):
                 flush()
                 parent_number = clauses[-1].clause_number.split("/")[0] if clauses else parent_number
             else:
-                # дописываем преамбулу пункта, затем выделяем подпункт отдельным clause
                 flush()
                 parent_number = clauses[-1].clause_number if clauses else parent_number
             sub_number = f"{parent_number}/{letter}" if parent_number else letter
@@ -271,6 +355,7 @@ def parse_pdf_to_structured(
                 hierarchy=Hierarchy(
                     chapter=hierarchy.chapter,
                     article=hierarchy.article,
+                    part=hierarchy.part,
                     paragraph=hierarchy.paragraph
                     or (f"Пункт {parent_number}" if parent_number else ""),
                     subpoint=hierarchy.subpoint,
@@ -279,15 +364,17 @@ def parse_pdf_to_structured(
             )
             continue
 
-        if table_m and current and not current.table_text:
-            # текстовый заголовок таблицы рядом с пунктом
-            current.text = f"{current.text} [{line}]".strip()
-            continue
+        # строки таблицы после «Таблица N» — копим под табл.N, не под чужим пунктом
+        if active_table_id and current and current.clause_number == active_table_id:
+            if _looks_like_table_row(line) or not _CLAUSE_LINE.match(line):
+                current.text = f"{current.text} {line}".strip()
+                if not current.table_text and _looks_like_table_row(line):
+                    current.table_text = line
+                continue
 
         if current:
             current.text = f"{current.text} {line}".strip()
         elif len(line) >= 40:
-            # преамбула без номера — общий блок
             flush()
             current = StructuredClause(
                 clause_number="",
@@ -295,6 +382,7 @@ def parse_pdf_to_structured(
                 hierarchy=Hierarchy(
                     chapter=hierarchy.chapter,
                     article=hierarchy.article,
+                    part=hierarchy.part,
                     paragraph=hierarchy.paragraph,
                     subpoint="",
                 ),
@@ -303,7 +391,7 @@ def parse_pdf_to_structured(
 
     flush()
 
-    # оставшиеся таблицы без пункта — отдельные clauses
+    # оставшиеся pdfplumber-таблицы без пункта — отдельные clauses
     for page, table_list in tables_by_page.items():
         for idx, table_text in enumerate(table_list, start=1):
             tables_attached += 1
@@ -311,7 +399,11 @@ def parse_pdf_to_structured(
                 StructuredClause(
                     clause_number=f"табл.p{page}.{idx}",
                     text=table_text,
-                    hierarchy=Hierarchy(chapter=hierarchy.chapter, article=hierarchy.article),
+                    hierarchy=Hierarchy(
+                        chapter=hierarchy.chapter,
+                        article=hierarchy.article,
+                        part=hierarchy.part,
+                    ),
                     table_text=table_text,
                     page=page,
                 )
@@ -331,6 +423,29 @@ def parse_pdf_to_structured(
     )
 
 
+def parse_pdf_to_structured(
+    path: Path,
+    *,
+    doc_id: str,
+    doc_name: str,
+    region_iso: str,
+    regulatory_level: str,
+    doc_type: str,
+    doc_version: str,
+) -> StructuredDocument:
+    """Rule-based разбор PDF на clauses с иерархией."""
+    return parse_lines_to_structured(
+        extract_pdf_lines(path),
+        doc_id=doc_id,
+        doc_name=doc_name,
+        region_iso=region_iso,
+        regulatory_level=regulatory_level,
+        doc_type=doc_type,
+        doc_version=doc_version,
+        page_tables=extract_pdf_tables(path),
+    )
+
+
 def build_hierarchical_chunks(doc: StructuredDocument) -> list[HierarchicalChunk]:
     """Вклеивает иерархию в текст чанка (Google-style context inheritance)."""
     chunks: list[HierarchicalChunk] = []
@@ -343,6 +458,8 @@ def build_hierarchical_chunks(doc: StructuredDocument) -> list[HierarchicalChunk
             parts.append(f"[{h.chapter}]")
         if h.article:
             parts.append(f"[{h.article}]")
+        if h.part:
+            parts.append(f"[{h.part}]")
         if h.paragraph:
             parts.append(f"[{h.paragraph}]")
         if h.subpoint:
