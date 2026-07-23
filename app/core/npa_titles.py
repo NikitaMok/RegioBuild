@@ -77,3 +77,27 @@ def short_federal_cite_from_citation(citation: str) -> str:
     if "санпин" in lowered or "sanpin" in lowered:
         return "СанПиН 2.2.1/2.1.1.1200-03"
     return "СП 42.13330.2016"
+
+
+def full_federal_cite_from_citation(citation: str) -> str:
+    """Полное официальное название федерального НПА по citation."""
+    return expand_npa_label(short_federal_cite_from_citation(citation))
+
+
+# Справочные URL первоисточников (федеральный слой); региональные — из regions.yaml
+FEDERAL_SOURCE_URLS: dict[str, str] = {
+    "СП 42.13330.2016": (
+        "https://meganorm.ru/mega_doc/norm/normy/0/"
+        "sp_42_13330_2016_svod_pravil_gradostroitelstvo_planirovka_i.html"
+    ),
+    "123-ФЗ": "https://www.consultant.ru/document/cons_doc_LAW_78699/",
+    "СанПиН 2.2.1/2.1.1.1200-03": (
+        "https://www.consultant.ru/document/cons_doc_LAW_120401/"
+    ),
+}
+
+
+def federal_source_url(citation: str) -> str:
+    short = short_federal_cite_from_citation(citation)
+    return FEDERAL_SOURCE_URLS.get(short, FEDERAL_SOURCE_URLS["СП 42.13330.2016"])
+

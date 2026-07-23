@@ -218,15 +218,15 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "Правовое регулирование (регион)" in text
     assert "Федеральный уровень" in text
     assert "Региональный уровень" in text
+    assert "Наличие требований по объекту" in text
     assert "Сроки и документы" in text
     assert "п. 3.2" in text
-    assert "Постановление №713/30" in text or "№713/30" in text
+    assert "713/30" in text
+    assert "открыть первоисточник" in text
     assert "По остальным категориям данные не найдены" not in text
     assert "Что требуется проверить дополнительно" in text
     assert "только учусь" not in text  # дисклеймер в format_response
     assert "объекту капитального строительства" in text
-    assert "Источники для проверки" not in text
-    assert "открыть первоисточник" not in text
     assert "региональный:" in text
 
 
@@ -370,10 +370,12 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
     assert "🔸" in text
     assert "(МО)" not in text
     assert "(КК)" not in text
-    assert "Постановление №713/30" in text
-    assert "Приказ №78" in text
+    assert "Постановление" in text and "713/30" in text
+    assert "Приказ" in text and "78" in text
     assert "п. 3.2" in text
     assert "п. 4.1" in text
+    assert "Как читать сравнение" in text
+    assert "первоисточник" in text
     assert "🔵" not in text
     assert "🟢" not in text
     assert "Что требуется проверить дополнительно" in text
