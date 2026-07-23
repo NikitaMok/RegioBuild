@@ -10,7 +10,7 @@ from app.agent.state import AgentState
 
 @lru_cache
 def build_agent_graph():
-    """Enterprise-граф: normalize → transform → retrieve → classify → rerank → LLM → format/guardrail."""
+    """Граф: normalize → transform → retrieve → classify → rerank → LLM → format/guardrail."""
     graph = StateGraph(AgentState)
 
     graph.add_node("normalize_business_type", nodes.normalize_business_type)

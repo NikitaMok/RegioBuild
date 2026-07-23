@@ -64,3 +64,4 @@ _info_resp.json
 
 # отчёты eval — артефакты прогонов; golden.jsonl остаётся в git
 data/eval/last_run.json
+data/eval/last_blind.json

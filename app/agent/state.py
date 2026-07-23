@@ -24,4 +24,6 @@ class AgentState(TypedDict, total=False):
 
     response_text: str
     error: Optional[str]
+    # aspect/retrieval: отказ как основной ответ (без «Не удалось получить ответ»)
+    refusal_kind: Optional[str]
     guardrail_blocked: bool
