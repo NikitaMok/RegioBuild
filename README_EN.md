@@ -102,7 +102,11 @@ A commercial contour needs visibility, not only answers:
 - Sentry via `SENTRY_DSN`
 
 Metrics and the dashboard contour are part of the product; connecting scrape or
-Alloy remote write to the public Bothost API completes the Cloud ↔ runtime link.
+Alloy remote write to the public API completes the Cloud ↔ runtime link.
+
+Production on a VPS (nginx, backups, Prometheus/Alertmanager, SSH CI/CD):  
+[`docs/PRODUCTION.md`](docs/PRODUCTION.md). Bothost demo checklist:  
+[`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
 
 ### Quality
 
@@ -283,7 +287,9 @@ uvicorn app.api.main:app --reload
 python -m app.bot.main
 ```
 
-Or `docker compose up --build`. Postgres: `docker-compose.postgres.yml`.
+Or `docker compose up --build`. Production VPS:
+`docker compose -f docker-compose.prod.yml --env-file .env up -d --build`
+(see [`docs/PRODUCTION.md`](docs/PRODUCTION.md)). Postgres: `docker-compose.postgres.yml`.
 
 ```bash
 pytest
