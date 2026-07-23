@@ -57,8 +57,8 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
 
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
-    api_base_url: str = "http://localhost:8000"
+    api_port: int = 3000
+    api_base_url: str = "http://localhost:3000"
 
     log_level: str = "INFO"
     log_json: bool = False

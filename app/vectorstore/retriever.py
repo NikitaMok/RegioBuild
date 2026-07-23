@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.core.regions import FEDERAL_CODE, get_region, resolve_region_code
 from app.vectorstore.types import RetrievedChunk
 
-__all__ = ["RetrievedChunk", "retrieve", "hybrid_retrieve"]
+__all__ = ["RetrievedChunk", "retrieve", "hybrid_retrieve", "retrieve_curated"]
 
 _TOKEN = re.compile(r"[а-яa-z0-9./\-]+", re.IGNORECASE)
 
@@ -103,12 +103,36 @@ def _retrieve_chroma(query: str, region_code: str | None, top_k: int) -> list[Re
                 section_number=metadata.get("section_number") or None,
                 category=metadata.get("category") or None,
                 distance=distance,
+                tags=list(metadata.get("tags") or []),
+                doc_type=str(metadata.get("doc_type") or ""),
             )
         )
     return chunks
 
 
-def _retrieve_qdrant(query: str, region_code: str | None, top_k: int) -> list[RetrievedChunk]:
+def _rows_to_chunks(rows: list[dict]) -> list[RetrievedChunk]:
+    return [
+        RetrievedChunk(
+            id=r["id"],
+            text=r["text"],
+            region_code=r["region_code"],
+            section_number=r.get("section_number"),
+            category=r.get("category"),
+            distance=1.0 - float(r["score"]),
+            tags=list((r.get("payload") or {}).get("tags") or []),
+            doc_type=str((r.get("payload") or {}).get("doc_type") or ""),
+        )
+        for r in rows
+    ]
+
+
+def _retrieve_qdrant(
+    query: str,
+    region_code: str | None,
+    top_k: int,
+    *,
+    doc_type: str | None = None,
+) -> list[RetrievedChunk]:
     from app.embeddings.embedder import get_embedder
     from app.vectorstore.qdrant_store import get_qdrant_store
 
@@ -122,31 +146,33 @@ def _retrieve_qdrant(query: str, region_code: str | None, top_k: int) -> list[Re
             region_iso=FEDERAL_CODE,
             include_federal=True,
             top_k=top_k,
+            doc_type=doc_type,
         )
     else:
-        # федеральный слой агент тянет отдельным запросом (RU-FED);
-        # примесь federal здесь размывала региональный top-k
         rows = store.search(
             query_embedding,
             region_iso=region_iso,
             include_federal=False,
             top_k=top_k,
+            doc_type=doc_type,
         )
-    return [
-        RetrievedChunk(
-            id=r["id"],
-            text=r["text"],
-            region_code=r["region_code"],
-            section_number=r.get("section_number"),
-            category=r.get("category"),
-            distance=1.0 - float(r["score"]),
-        )
-        for r in rows
-    ]
+    return _rows_to_chunks(rows)
 
 
 def retrieve(query: str, region_code: str | None = None, top_k: int = 5) -> list[RetrievedChunk]:
     return hybrid_retrieve(query, region_code=region_code, top_k=top_k)
+
+
+def retrieve_curated(
+    query: str,
+    region_code: str | None = None,
+    top_k: int = 8,
+) -> list[RetrievedChunk]:
+    """Dense search только по indexed CURATED (не JSONL-inject): similarity в подмножестве якорей."""
+    settings = get_settings()
+    if settings.vector_backend != "qdrant":
+        return []
+    return _retrieve_qdrant(query, region_code, top_k, doc_type="CURATED")
 
 
 def hybrid_retrieve(
@@ -155,7 +181,8 @@ def hybrid_retrieve(
     top_k: int = 20,
 ) -> list[RetrievedChunk]:
     settings = get_settings()
-    fetch_k = max(top_k, 20)
+    # шире dense-пул: точечные якоря часто на ранге 20–80 в полном корпусе
+    fetch_k = max(top_k, 96)
     if settings.vector_backend == "qdrant":
         dense = _retrieve_qdrant(query, region_code, fetch_k)
     else:

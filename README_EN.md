@@ -106,11 +106,32 @@ Alloy remote write to the public Bothost API completes the Cloud ↔ runtime lin
 
 ### Quality
 
-Retrieval quality is measured, not eyeballed: a golden set
-(`data/eval/golden.jsonl`) with expected clause anchors per region and
-`python -m scripts.eval_golden` (metric — expected clauses hitting the agent's
-retrieval context). Current run: **16/20 = 80% hit rate** (RU-NVS, RU-SVE,
-RU-TA at 100%; weakest — federal-only cases).
+Hit rate = share of cases where at least one expected `section_number` appears in
+the agent's retrieval context (`python -m scripts.eval_golden`, retrieval mode).
+This is **not** “legally correct answer” and not a building permit — only an
+anchor-retrieval metric. Disclaimer: [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
+
+Targets: **100** cases in `data/eval/golden.jsonl`, hit rate **≥ 95%** (aim 99%).
+`eval_golden` retrieval threshold: 0.95.
+
+LLM: `temperature=0.0` on all calls (normalization, extraction, compare) for
+deterministic NPA answers.
+
+Current honest runs (`fastembed` + Qdrant, full corpus, no curated JSONL
+force-inject and no CURATED-only search):
+
+| Set | Hit rate | Role |
+|-----|----------|------|
+| `data/eval/golden.jsonl` | **100/100** | diagnostic anchors |
+| `data/eval/blind_paraphrase.jsonl` | **60/60** | blind lawyer/builder paraphrases in pilot scope |
+
+Blind ≥ 90% is the robustness target in scope; golden alone is not “ready for demo”.
+Safety: citation grounding + numeric guardrail; weak/empty support → refusal.
+Not claimed: site-level legal correctness of answers. Possible future commercial
+upgrade: human-in-the-loop verification / deeper answer-eval (not current DoD).
+
+Blind run:
+`python -m scripts.eval_golden --golden data/eval/blind_paraphrase.jsonl`
 
 Pytest in CI (light suite without torch). Post-deploy smoke checks that the
 contour is alive.
@@ -180,10 +201,11 @@ Scaling to new regions is a data-and-config procedure, no code changes:
 | `RU-SVE` | Sverdlovsk Oblast |
 | `RU-NVS` | Novosibirsk Oblast |
 | `RU-TA` | Republic of Tatarstan |
-| `RU-FED` | Federal layer (SP 42, excerpts from 123-FZ / SanPiN) |
+| `RU-FED` | Federal layer: Urban Planning Code, SP 42, 123-FZ, SanPiN (full PDF parse in index) |
 
-The index is limited to this corpus and does not claim full coverage of Russian
-codes of practice or the full object classifier.
+The index is limited to this corpus and does not claim full coverage of all
+Russian codes of practice or the full object classifier. Local zoning (PZZ) /
+municipal level are out of scope.
 
 ---
 

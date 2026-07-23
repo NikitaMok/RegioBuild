@@ -20,11 +20,13 @@ STRUCTURED_DIR = BASE_DIR / "data" / "structured"
 CHUNKS_DIR = STRUCTURED_DIR / "chunks"
 
 
-def run(limit: int | None = None) -> int:
+def run(limit: int | None = None, only_ids: set[str] | None = None) -> int:
     STRUCTURED_DIR.mkdir(parents=True, exist_ok=True)
     CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
 
     docs = list(ingestible_documents())
+    if only_ids:
+        docs = [d for d in docs if d.id in only_ids]
     if limit is not None:
         docs = docs[:limit]
 
@@ -89,13 +91,29 @@ def run(limit: int | None = None) -> int:
         )
 
     summary_path = STRUCTURED_DIR / "_summary.json"
+    if only_ids and summary_path.exists():
+        try:
+            prev = json.loads(summary_path.read_text(encoding="utf-8"))
+            by_id = {r["id"]: r for r in prev.get("documents", [])}
+            for row in summary:
+                by_id[row["id"]] = row
+            merged = list(by_id.values())
+            summary = merged
+            total_clauses = sum(int(r.get("clauses", 0)) for r in merged)
+            total_chunks = sum(int(r.get("chunks", 0)) for r in merged)
+            ingestible_count = len(merged)
+        except Exception:  # noqa: BLE001
+            ingestible_count = len(docs)
+    else:
+        ingestible_count = len(docs)
+
     summary_path.write_text(
         json.dumps(
             {
                 "documents": summary,
                 "total_clauses": total_clauses,
                 "total_chunks": total_chunks,
-                "ingestible": len(docs),
+                "ingestible": ingestible_count,
             },
             ensure_ascii=False,
             indent=2,
@@ -108,9 +126,14 @@ def run(limit: int | None = None) -> int:
 
 def main() -> None:
     limit = None
-    if len(sys.argv) > 1 and sys.argv[1].isdigit():
-        limit = int(sys.argv[1])
-    raise SystemExit(run(limit=limit))
+    only_ids: set[str] | None = None
+    args = sys.argv[1:]
+    if args and args[0].isdigit():
+        limit = int(args[0])
+        args = args[1:]
+    if args and args[0] == "--only":
+        only_ids = set(args[1:])
+    raise SystemExit(run(limit=limit, only_ids=only_ids))
 
 
 if __name__ == "__main__":

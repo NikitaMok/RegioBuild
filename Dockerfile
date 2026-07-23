@@ -43,6 +43,6 @@ RUN chmod +x entrypoint.sh && mkdir -p /app/data
 # curated JSONL в образе; upsert в Chroma — только локально при установленном chromadb
 RUN python -m scripts.ingest_curated
 
-EXPOSE 8000
+EXPOSE 3000
 
 CMD ["./entrypoint.sh"]

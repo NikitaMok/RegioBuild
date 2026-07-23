@@ -116,68 +116,14 @@ documents:
     is_active: true
     ingest: true
 
-  # --- Municipal deferred (do not ingest) ---
-  - id: RU-NVS_LOCAL_NSK_CITY
-    filename: "О_Местных_нормативах_градостроительного_проектирования_города_Новосибирска_с_изменениями_на_21_декаб.pdf"
-    region_iso: RU-NVS
-    regulatory_level: municipal
-    doc_type: local_NGP
-    doc_name: "Местные нормативы градостроительного проектирования города Новосибирска"
-    doc_version: "deferred"
-    is_active: false
-    ingest: false
-    scope: deferred
-
-  - id: RU-NVS_LOCAL_NSK_ORDER
-    filename: "О_Порядке_подготовки,_утверждения_местных_нормативов_градостроительного_проектирования_города_Новоси.pdf"
-    region_iso: RU-NVS
-    regulatory_level: municipal
-    doc_type: local_NGP
-    doc_name: "Порядок подготовки местных нормативов г. Новосибирска"
-    doc_version: "deferred"
-    is_active: false
-    ingest: false
-    scope: deferred
-
+  # --- Municipal: вне скоупа. На диске остался 1 PDF — не индексировать.
+  # Удалить файл с диска после подтверждения автора, затем убрать эту запись.
   - id: RU-NVS_LOCAL_GO_1
     filename: "Об_утверждении_местных_нормативов_градостроительного_проектирования_муниципального_образования_Город (1).pdf"
     region_iso: RU-NVS
     regulatory_level: municipal
     doc_type: local_NGP
     doc_name: "Местные НГП муниципального образования (Город) (1)"
-    doc_version: "deferred"
-    is_active: false
-    ingest: false
-    scope: deferred
-
-  - id: RU-NVS_LOCAL_GO_2
-    filename: "Об_утверждении_местных_нормативов_градостроительного_проектирования_муниципального_образования_город.pdf"
-    region_iso: RU-NVS
-    regulatory_level: municipal
-    doc_type: local_NGP
-    doc_name: "Местные НГП муниципального образования (город)"
-    doc_version: "deferred"
-    is_active: false
-    ingest: false
-    scope: deferred
-
-  - id: RU-NVS_LOCAL_DISTRICT
-    filename: "Об_утверждении_местных_нормативов_градостроительного_проектирования_Новосибирского_района_Новосибирс.pdf"
-    region_iso: RU-NVS
-    regulatory_level: municipal
-    doc_type: local_NGP
-    doc_name: "Местные НГП Новосибирского района"
-    doc_version: "deferred"
-    is_active: false
-    ingest: false
-    scope: deferred
-
-  - id: RU-NVS_LOCAL_URBAN_OKRUG
-    filename: "Об_утверждении_Нормативов_градостроительного_проектирования_городского_округа_-_муниципального_образ.pdf"
-    region_iso: RU-NVS
-    regulatory_level: municipal
-    doc_type: local_NGP
-    doc_name: "НГП городского округа — муниципального образования"
     doc_version: "deferred"
     is_active: false
     ingest: false

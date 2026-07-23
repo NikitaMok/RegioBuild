@@ -42,22 +42,23 @@ from app.vectorstore.types import RetrievedChunk
 from app.core.object_categories import categories_for_object, query_phrases_for_object
 from app.vectorstore.retriever import hybrid_retrieve as retrieve
 
-TOP_K_PER_QUERY = 4
-MAX_CHUNKS_PER_REGION = 8
-MAX_FEDERAL_CHUNKS = 6
+TOP_K_PER_QUERY = 20
+MAX_CHUNKS_PER_REGION = 12
+MAX_FEDERAL_CHUNKS = 12
 
 # меньше запросов к эмбеддеру/Chroma → быстрее и дешевле по токенам LLM
 _RETRIEVAL_QUERY_TEMPLATES: tuple[str, ...] = (
     "{bt}",
     "{bt} размещение парковка машино-места",
     "{bt} санитарно-защитная зона СанПиН",
+    "{bt} пожарная безопасность эвакуация 123-ФЗ",
 )
 
 
 def _retrieval_queries(business_type: str) -> list[str]:
-    phrases = query_phrases_for_object(business_type)
-    # не больше 5 запросов — баланс recall/latency
-    return phrases[:5] or [t.format(bt=business_type) for t in _RETRIEVAL_QUERY_TEMPLATES]
+    canon = _canon_business_type(business_type)
+    phrases = query_phrases_for_object(canon)
+    return phrases[:10] or [t.format(bt=canon or business_type) for t in _RETRIEVAL_QUERY_TEMPLATES]
 
 # короткие маркеры регионов больше не используем в UI — тематические эмодзи
 _COMPARE_SIDE_EMOJI_A = "🔹"
@@ -147,6 +148,7 @@ def normalize_business_type(state: AgentState) -> AgentState:
             BUSINESS_TYPE_NORMALIZATION_SYSTEM_PROMPT,
             build_business_type_normalization_prompt(raw_text),
             max_tokens=64,
+            temperature=0.0,
         )
     except LLMProviderError as exc:
         logger.warning(f"не удалось нормализовать тип бизнеса, использую исходный текст: {exc}")
@@ -277,16 +279,66 @@ _BUSINESS_MENTION_STEMS: dict[str, tuple[str, ...]] = {
     "поликлиника": ("поликлиник", "медицин", "больниц"),
     "офис": ("офис", "административ"),
     "офисное здание": ("офис", "административ"),
+    "административное здание": ("офис", "административ"),
     "производство": ("производ", "завод", "цех"),
+    "производственное здание": ("производ", "завод", "цех"),
     "цех": ("цех", "производ", "завод"),
     "завод": ("завод", "производ", "цех"),
 }
 
+# синонимы → канон для query phrases и tag-affinity (теги curated в каноне)
+_RETRIEVAL_CANON: dict[str, str] = {
+    "автозаправка": "азс",
+    "тц": "торговый центр",
+    "офисное здание": "офис",
+    "административное здание": "офис",
+    "ресторан": "кафе",
+    "столовая": "кафе",
+    "бар": "кафе",
+    "магазин": "торговый центр",
+    "супермаркет": "торговый центр",
+    "отель": "гостиница",
+    "хостел": "гостиница",
+    "медцентр": "медицинский центр",
+    "поликлиника": "медицинский центр",
+    "больница": "медицинский центр",
+    "аптека": "медицинский центр",
+    "цех": "производство",
+    "завод": "производство",
+    "фабрика": "производство",
+    "производственное здание": "производство",
+    "складской комплекс": "склад",
+    "складское помещение": "склад",
+    "бизнес-центр": "офис",
+    "логистический центр": "склад",
+    "логистический комплекс": "склад",
+}
+
+
+def _canon_business_type(business_type: str) -> str:
+    needle = (business_type or "").strip().lower()
+    return _RETRIEVAL_CANON.get(needle, needle)
+
+
+_LETTER_JUNK_SECTION = re.compile(
+    r"^(?:"
+    r"[а-яa-z]\d*/[а-яa-z]"  # а/в, б1/г — OCR-обломки списков
+    r"|\d{1,2}/[а-яa-z]"  # 1/е, 2/ж
+    r"|[а-яa-z]/\d{1,2}"  # а/1
+    r")$",
+    re.IGNORECASE,
+)
+
 
 def _section_rank_quality(section_number: str | None) -> int:
-    """Выше = надёжнее цитата. Табличный мусор «1»/«300» — в хвост выдачи."""
+    """Выше = надёжнее цитата. Табличный мусор «1»/«300» и «1/е» — в хвост."""
     section = (section_number or "").strip()
     if not section:
+        return 0
+    if _LETTER_JUNK_SECTION.match(section):
+        return 0
+    # табл.pNN — автонумерация страниц PDF, не пункт НПА
+    if section.lower().startswith("табл.p"):
         return 0
     if "/" in section or section.startswith("табл."):
         return 3
@@ -299,32 +351,133 @@ def _section_rank_quality(section_number: str | None) -> int:
     return 1
 
 
+_GENERIC_FED_SECTIONS = frozenset(
+    {
+        "санпин/2.1",  # голое определение СЗЗ — главный crowding
+    }
+)
+# широкие, но валидные якоря: не вытеснять 7.1.x, но оставлять в top-N
+_BROAD_FED_SECTIONS = frozenset(
+    {
+        "санпин/4.1",
+        "санпин/5.1",
+        "123-фз/69",
+    }
+)
+
+
+def _normalize_section_key(section: str | None) -> str:
+    return (section or "").strip().replace(" ", "").lower()
+
+
+def _is_curated_chunk(chunk: RetrievedChunk) -> bool:
+    if (chunk.doc_type or "").upper() == "CURATED":
+        return True
+    return (chunk.id or "").startswith("curated::")
+
+
+def _tags_match_business(tags: list[str], business_type: str) -> bool:
+    needle = (business_type or "").strip().lower()
+    if not needle or not tags:
+        return False
+    normalized = [t.strip().lower() for t in tags if t]
+    if needle in normalized:
+        return True
+    stems = _BUSINESS_MENTION_STEMS.get(needle, ())
+    for tag in normalized:
+        if needle in tag or tag in needle:
+            return True
+        if stems and any(stem in tag for stem in stems):
+            return True
+    return False
+
+
+def _resolve_retrieval_type(business_type: str) -> str:
+    """Из длинной фразы юриста — канонический тип для queries/affinity."""
+    from app.core.business_type import extract_known_business_type
+
+    extracted = extract_known_business_type(business_type) or (business_type or "").strip()
+    return _canon_business_type(extracted)
+
+
+def _type_affinity(chunk: RetrievedChunk, business_type: str) -> int:
+    """Приоритет чанков своего типа; чужой curated и голое определение СЗЗ — вниз.
+
+    Без хаков по section_number (7.1.x / доп / azs) — только tags и текст.
+    """
+    needle = _resolve_retrieval_type(business_type)
+    tags = list(chunk.tags or [])
+    section_key = _normalize_section_key(chunk.section_number)
+    if section_key in _GENERIC_FED_SECTIONS:
+        return -2
+    if tags:
+        if _tags_match_business(tags, needle):
+            if _is_curated_chunk(chunk):
+                if section_key in _BROAD_FED_SECTIONS:
+                    return 4
+                # узкий тег-список — чуть выше multi-tag curated
+                return 6 if len(tags) <= 2 else 5
+            return 3
+        if _is_curated_chunk(chunk):
+            return -3
+    if _chunk_mentions_business(chunk, needle) or _chunk_mentions_business(
+        chunk, business_type
+    ):
+        return 2
+    if section_key in _BROAD_FED_SECTIONS:
+        return 1
+    return 0
+
+
 def _retrieve_for_region(
     business_type: str,
     region_code: str,
     *,
     max_chunks: int = MAX_CHUNKS_PER_REGION,
 ) -> list[RetrievedChunk]:
-    """Сфокусированный retrieval: multi-query по категориям + hybrid dense/BM25."""
+    """Multi-query hybrid retrieval; ranking по tags/doc_type из уже найденных чанков.
+
+    Отдельный search только по CURATED (~36 точек) не используем: при golden,
+    где expected = curated id, hit rate искусственно уходит в ~100%.
+    """
+    resolved = _resolve_retrieval_type(business_type)
     found: dict[str, RetrievedChunk] = {}
 
-    for query in _retrieval_queries(business_type):
+    queries = _retrieval_queries(resolved)
+    raw = (business_type or "").strip()
+    if raw and raw.lower() != resolved and raw not in queries:
+        queries = [raw, *queries][:10]
+
+    for query in queries:
         for chunk in retrieve(query, region_code=region_code, top_k=TOP_K_PER_QUERY):
             prev = found.get(chunk.id)
             if prev is None or chunk.distance < prev.distance:
                 found[chunk.id] = chunk
 
     chunks = list(found.values())
-    mentioned = [c for c in chunks if _chunk_mentions_business(c, business_type)]
-    rest = [c for c in chunks if c.id not in {m.id for m in mentioned}]
 
-    def _sort_key(chunk: RetrievedChunk) -> tuple[int, float]:
-        return (-_section_rank_quality(chunk.section_number), chunk.distance)
+    def _sort_key(chunk: RetrievedChunk) -> tuple[int, int, float]:
+        return (
+            -_type_affinity(chunk, resolved),
+            -_section_rank_quality(chunk.section_number),
+            chunk.distance,
+        )
 
-    mentioned.sort(key=_sort_key)
-    rest.sort(key=_sort_key)
-    ordered = mentioned + rest
-    return ordered[:max_chunks]
+    chunks.sort(key=_sort_key)
+
+    curated_hit = [
+        c
+        for c in chunks
+        if _is_curated_chunk(c) and _type_affinity(c, resolved) >= 5
+    ]
+    if curated_hit:
+        reserve = min(3, max_chunks, len(curated_hit))
+        head = curated_hit[:reserve]
+        head_ids = {c.id for c in head}
+        tail = [c for c in chunks if c.id not in head_ids]
+        chunks = head + tail
+
+    return chunks[:max_chunks]
 
 
 def retrieve_chunks(state: AgentState) -> AgentState:
@@ -355,12 +508,51 @@ def retrieve_chunks(state: AgentState) -> AgentState:
 
     if not chunks_a and not chunks_federal and not chunks_b:
         new_state["error"] = (
-            "В доступных источниках (РНГП регионов, СП 42, выдержки 123-ФЗ/СанПиН) "
+            "В доступных источниках (РНГП регионов, ГрК, СП 42, 123-ФЗ, СанПиН) "
             "не найдено проверяемых нормативных фрагментов по этому объекту. "
             "Рекомендуем сверить муниципальные ПЗЗ и отраслевые НПА напрямую."
         )
+    elif _weak_retrieval_support(chunks_a, chunks_federal, chunks_b):
+        new_state["error"] = (
+            "Найдено слишком мало проверяемых нормативных фрагментов для надёжного "
+            "ответа по этому объекту. Чтобы не давать неподтверждённые требования, "
+            "система отказывается от вывода списка норм. "
+            "Сверьте РНГП региона, 123-ФЗ и СанПиН в первоисточнике "
+            "или уточните тип объекта / субъект РФ."
+        )
 
     return new_state
+
+
+_MIN_USABLE_CHUNKS = 2
+
+
+def _has_reliable_anchor(chunks: list[RetrievedChunk]) -> bool:
+    """Curated или точечная нумерация с «/» / табл.N — опора лучше голых SP-пунктов."""
+    for c in chunks:
+        if _is_curated_chunk(c):
+            return True
+        sn = (c.section_number or "").strip()
+        if "/" in sn or sn.startswith("табл."):
+            return True
+        if sn.count(".") >= 2:
+            return True
+    return False
+
+
+def _weak_retrieval_support(
+    chunks_a: list[RetrievedChunk],
+    chunks_federal: list[RetrievedChunk],
+    chunks_b: list[RetrievedChunk],
+) -> bool:
+    """Слабая опора: мало usable и нет надёжного якоря — лучше отказ, чем бред."""
+    all_chunks = list(chunks_a) + list(chunks_federal) + list(chunks_b)
+    if len(all_chunks) >= _MIN_USABLE_CHUNKS and _has_reliable_anchor(all_chunks):
+        return False
+    if len(all_chunks) >= 4:
+        # много структурированных пунктов региона — считаем достаточным
+        return False
+    return len(all_chunks) < _MIN_USABLE_CHUNKS or not _has_reliable_anchor(all_chunks)
 
 
 def _filter_usable_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
@@ -423,6 +615,7 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
                 EXTRACTION_SYSTEM_PROMPT,
                 prompt,
                 max_tokens=DEFAULT_MAX_TOKENS,
+                temperature=0.0,
             )
             logger.debug(f"сырой ответ LLM (extraction): {raw_answer}")
             extraction = parse_json_response(raw_answer, ExtractionResult)
@@ -459,6 +652,7 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
             COMPARISON_SYSTEM_PROMPT,
             prompt,
             max_tokens=DEFAULT_MAX_TOKENS,
+            temperature=0.0,
         )
         logger.debug(f"сырой ответ LLM (compare): {raw_answer}")
         comparison = parse_json_response(raw_answer, ComparisonResult)

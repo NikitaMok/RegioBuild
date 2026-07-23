@@ -57,10 +57,13 @@ def _load_curated_chunks() -> list[dict]:
                 raw = json.loads(line)
                 region_iso = resolve_region_code(raw["region_code"])
                 section = str(raw.get("section_number") or "").strip()
+                body = str(raw.get("text") or "").strip()
+                # номер пункта в тексте — для dense/BM25, без keyword-stuffing под queries
+                indexed_text = f"{section}. {body}" if section and not body.startswith(section) else body
                 rows.append(
                     {
                         "chunk_id": f"curated::{region_iso}::{section}",
-                        "text": raw["text"],
+                        "text": indexed_text,
                         "region_iso": region_iso,
                         "regulatory_level": "federal" if region_iso == FEDERAL_CODE else "regional",
                         "doc_type": "CURATED",
