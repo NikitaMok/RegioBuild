@@ -79,16 +79,17 @@ Nodes drive the flow end-to-end:
 5. requirement classification and rerank  
 6. grounded generation and formatting  
 
-The LLM sits behind a provider abstraction: GigaChat Pro in production;
-YandexGPT is in the codebase with failover off by default — no agent rewrite
-to switch.
+The LLM sits behind a provider abstraction: **GigaChat Ultra** (`GigaChat-3-Ultra`)
+in production; YandexGPT is in the codebase with failover off by default — no
+agent rewrite to switch.
 
 ### Production
 
-FastAPI + aiogram 3 + Docker. One image; process role via `SERVICE_ROLE=api|bot`.
-Vectors on Qdrant Cloud; embeddings on memory-tight hosts use ONNX (fastembed),
-without PyTorch in the runtime. Disk LLM cache avoids paying twice for the same
-request.
+Production runs on an **Aeza VPS** (Moscow): nginx, API, Telegram bot,
+Prometheus/Alertmanager, weekly backups. FastAPI + aiogram 3 + Docker; one image,
+process role via `SERVICE_ROLE=api|bot`. Vectors on Qdrant Cloud; embeddings use
+ONNX (fastembed), without PyTorch in the runtime. Disk LLM cache avoids paying
+twice for the same request.
 
 ### Observability
 
@@ -104,9 +105,8 @@ A commercial contour needs visibility, not only answers:
 Metrics and the dashboard contour are part of the product; connecting scrape or
 Alloy remote write to the public API completes the Cloud ↔ runtime link.
 
-Production on a VPS (nginx, backups, Prometheus/Alertmanager, SSH CI/CD):  
-[`docs/PRODUCTION.md`](docs/PRODUCTION.md). Bothost demo checklist:  
-[`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
+Production on an Aeza VPS (nginx, backups, Prometheus/Alertmanager, SSH CI/CD):  
+[`docs/PRODUCTION.md`](docs/PRODUCTION.md).
 
 ### Quality
 
@@ -141,7 +141,7 @@ Pytest in CI (light suite without torch). Post-deploy smoke checks that the
 contour is alive.
 
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).  
-Deployment: [`docs/BOTHOST_CHECKLIST.md`](docs/BOTHOST_CHECKLIST.md).
+Deployment: [`docs/PRODUCTION.md`](docs/PRODUCTION.md).
 
 <p align="center">
   <img src="docs/screenshots/02-bot-start.png" alt="Bot start" width="360"/>
@@ -223,6 +223,7 @@ municipal level are out of scope.
 - hybrid retrieval, Qdrant, ISO regions  
 - requirement-category classifier  
 - Docker, CI, Prometheus metrics, Grafana Cloud contour, tests, smoke  
+- production on Aeza VPS (nginx, backups, monitoring)  
 - API-first surface alongside the Telegram demo  
 
 **Next**
@@ -246,10 +247,10 @@ municipal level are out of scope.
 | Embeddings | fastembed (ONNX); optional sentence-transformers |
 | Vector DB | Qdrant (primary); Chroma as local legacy |
 | Classification | scikit-learn (TF-IDF + LogisticRegression) |
-| LLM | GigaChat Pro |
+| LLM | GigaChat Ultra (`GigaChat-3-Ultra`) |
 | Data | SQLAlchemy, Alembic |
 | Observability | Prometheus `/metrics`, Grafana Cloud, Sentry |
-| Infrastructure | Docker, GitHub Actions |
+| Infrastructure | Docker, GitHub Actions, Aeza VPS |
 
 ---
 

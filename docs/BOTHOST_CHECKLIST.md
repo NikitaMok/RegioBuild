@@ -31,7 +31,7 @@ Bothost support: 8000 ломает роутинг Traefik (снаружи 504 п
 | `PORT` | `3000` (совпадает с портом веб-приложения в панели) |
 | `DATABASE_URL` | sqlite/файл на volume, который не затирается |
 | `LLM_PROVIDER` | `gigachat` |
-| креды GigaChat | из кабинета GigaChat Pro |
+| креды GigaChat | из кабинета GigaChat API (`GigaChat-3-Ultra`) |
 | `VECTOR_BACKEND` | `qdrant` |
 | `EMBEDDING_BACKEND` | `fastembed` (явно; так же в образе) |
 | `WARMUP_ON_START` | `off` (в образе по умолчанию; `delayed` на Bothost не использовать) |

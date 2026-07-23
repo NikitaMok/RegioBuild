@@ -218,16 +218,20 @@ def test_render_extraction_includes_greeting_regulator_category_and_citation() -
     assert "Правовое регулирование (регион)" in text
     assert "Федеральный уровень" in text
     assert "Региональный уровень" in text
-    assert "Наличие требований по объекту" in text
+    assert "Наличие требований по объекту" not in text
     assert "Сроки и документы" in text
     assert "п. 3.2" in text
     assert "713/30" in text
-    assert "открыть первоисточник" in text
+    assert "открыть первоисточник" not in text
+    assert "первоисточник" not in text
     assert "По остальным категориям данные не найдены" not in text
     assert "Что требуется проверить дополнительно" in text
     assert "только учусь" not in text  # дисклеймер в format_response
     assert "объекту капитального строительства" in text
-    assert "региональный:" in text
+    assert "региональный:" not in text
+    assert "федеральный:" not in text
+    # пункт → НПА (родительный)
+    assert "п. 3.2 Постановления" in text
 
 
 def test_audit_sections_from_state_dedupes_chunks() -> None:
@@ -252,12 +256,28 @@ def test_citation_suffix_marks_federal_source_explicitly() -> None:
     assert nodes._citation_suffix("3.2", "региональный") == "(п. 3.2)"
     federal = nodes._citation_suffix("5.1", "федеральный")
     assert "СП 42.13330.2016" in federal
-    assert "п. 5.1" in federal
+    assert federal.startswith("(п. 5.1 ")
+    assert "федеральный:" not in federal
 
 
 def test_citation_suffix_strips_punkt_noise() -> None:
     assert nodes._citation_suffix("пункт 725", "региональный") == "(п. 725)"
     assert nodes._citation_suffix("п. 5.23", "региональный") == "(п. 5.23)"
+
+
+def test_format_item_source_puts_clause_before_npa() -> None:
+    text = nodes._format_item_source("11.5", "региональный", "moscow_oblast")
+    assert text.startswith("(п. 11.5 Постановления")
+    assert "713/30" in text
+    assert "региональный" not in text
+    assert "первоисточник" not in text
+    assert "<a " not in text
+
+
+def test_punkt_label_from_curated_ids() -> None:
+    assert nodes._punkt_label("СанПиН/7.1.3") == "п. 7.1.3"
+    assert nodes._punkt_label("123-ФЗ/69") == "ст. 69"
+    assert nodes._punkt_label("3.2.7") == "п. 3.2.7"
 
 
 def test_render_extraction_marks_federal_fallback_item() -> None:
@@ -374,11 +394,13 @@ def test_render_comparison_includes_summary_and_both_regions() -> None:
     assert "Приказ" in text and "78" in text
     assert "п. 3.2" in text
     assert "п. 4.1" in text
-    assert "Как читать сравнение" in text
-    assert "первоисточник" in text
+    assert "Как читать сравнение" not in text
+    assert "первоисточник" not in text
     assert "🔵" not in text
     assert "🟢" not in text
     assert "Что требуется проверить дополнительно" in text
+    # пункт перед названием НПА
+    assert "п. 3.2 Постановления" in text or "п. 3.2" in text
 
 
 def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:

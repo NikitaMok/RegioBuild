@@ -1,6 +1,6 @@
-# Прод-выкладка RegioBuild (VPS)
+# Прод-выкладка RegioBuild (VPS Aeza)
 
-Один сервер: nginx → API, Telegram-бот, Prometheus + Alertmanager, еженедельный бэкап SQLite.
+Один сервер (Aeza MSK): nginx → API, Telegram-бот, Prometheus + Alertmanager, еженедельный бэкап SQLite.
 Векторный индекс — **Qdrant Cloud** (бэкапится у провайдера Qdrant; локально копируем БД запросов/фидбека и LLM-кэш).
 
 ## Быстрый старт на сервере
