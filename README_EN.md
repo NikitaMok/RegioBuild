@@ -98,22 +98,19 @@ A commercial contour needs visibility, not only answers:
 - Prometheus metrics on `GET /metrics` (including
   `regiobuild_guardrail_blocks_total`, latency and HTTP errors via the
   instrumentator)
-- Grafana Cloud: remote-write / scrape credentials in env; pipeline notes in
-  [`docs/GRAFANA.md`](docs/GRAFANA.md)
 - Sentry via `SENTRY_DSN`
 
-Metrics and the dashboard contour are part of the product; connecting scrape or
-Alloy remote write to the public API completes the Cloud ↔ runtime link.
-
-Production on an Aeza VPS (nginx, backups, Prometheus/Alertmanager, SSH CI/CD):  
-[`docs/PRODUCTION.md`](docs/PRODUCTION.md).
+Production runs on an Aeza VPS: nginx, API, Telegram bot,
+Prometheus/Alertmanager, SSH deploy (`docker-compose.prod.yml`,
+`scripts/deploy_remote.sh`).
 
 ### Quality
 
 Hit rate = share of cases where at least one expected `section_number` appears in
 the agent's retrieval context (`python -m scripts.eval_golden`, retrieval mode).
 This is **not** “legally correct answer” and not a building permit — only an
-anchor-retrieval metric. Disclaimer: [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
+anchor-retrieval metric. Disclaimer:
+[`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
 
 Targets: **100** cases in `data/eval/golden.jsonl`, hit rate **≥ 95%** (aim 99%).
 `eval_golden` retrieval threshold: 0.95.
@@ -141,8 +138,7 @@ Blind run:
 Pytest in CI (light suite without torch). Post-deploy smoke checks that the
 contour is alive.
 
-Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).  
-Deployment: [`docs/PRODUCTION.md`](docs/PRODUCTION.md).
+Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 <p align="center">
   <img src="docs/screenshots/02-bot-start.png" alt="Bot start" width="360"/>
@@ -290,8 +286,8 @@ python -m app.bot.main
 ```
 
 Or `docker compose up --build`. Production VPS:
-`docker compose -f docker-compose.prod.yml --env-file .env up -d --build`
-(see [`docs/PRODUCTION.md`](docs/PRODUCTION.md)). Postgres: `docker-compose.postgres.yml`.
+`docker compose -f docker-compose.prod.yml --env-file .env up -d --build`.
+Postgres: `docker-compose.postgres.yml`.
 
 ```bash
 pytest
@@ -309,7 +305,7 @@ RegioBuild is a reference tool, not legal advice. Answers do not replace design
 documentation, counsel’s opinion, or a check that norms are current at decision
 time. Municipal PZZ acts are not in the index — verify them separately.
 
-Details (Russian): [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
+Details: [`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
 
 ---
 

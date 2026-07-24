@@ -1077,6 +1077,13 @@ _ADDITIONAL_CHECKS_BLOCK_RE = re.compile(
     r"(?is)(?:^|\n)[ \t]*(?:<b>)?Что требуется проверить дополнительно:?[ \t]*(?:</b>)?"
     r"(?:\n[ \t]*\d+\.\s*[^\n]+)+",
 )
+_ADDITIONAL_CHECKS_HEADING_RE = re.compile(
+    r"(?im)^[ \t]*(?:<b>)?Что требуется проверить дополнительно:?[ \t]*(?:</b>)?[ \t]*$"
+)
+# латинская «N» перед номером акта → «№» (не трогаем SanPiN и слова)
+_LATIN_N_BEFORE_DOC_NUM_RE = re.compile(
+    r"(?<![A-Za-zА-Яа-яЁё/\d.])N(?=\s*\d)"
+)
 # сырые curated id в прозе: «п. СанПиН/7.1.3», «123-ФЗ/69»
 _CURATED_CITATION_IN_PROSE_RE = re.compile(
     r"(?i)(?:\b(?:п(?:ункт)?|ст|статья)\.?\s*)?"
@@ -1161,7 +1168,7 @@ def _fix_region_spellings(text: str) -> str:
     return cleaned
 
 
-_NPA_DOC_NUM_RE = re.compile(r"(?i)\bN\s*([\w\-/\.]+)")
+_NPA_DOC_NUM_RE = re.compile(r"(?i)(?:\bN|№)\s*([\w\-/\.]+)")
 
 
 def _resolve_keep_region_code(keep_region: str | None) -> str | None:
@@ -1565,7 +1572,7 @@ def _render_extraction(extraction: ExtractionResult) -> str:
         f"<b>{_greeting_for_info(extraction.business_type, region.name_locative)}</b>",
         f"🏛 Правовое регулирование (регион): {_esc(regional_npa)} "
         f"(проверено {region.last_verified})",
-        f"📜 Федеральные нормы: {_esc(sp_label)}; при наличии в источниках — также "
+        f"📜 Федеральные нормы: {_esc(sp_label)}. При наличии в источниках — также "
         f"{_esc(expand_npa_label('123-ФЗ'))} и {_esc(expand_npa_label('СанПиН'))}.",
     ]
 
@@ -1612,6 +1619,9 @@ def _render_comparison(comparison: ComparisonResult) -> str:
     region_a = get_region(comparison.region_a)
     region_b = get_region(comparison.region_b)
     sp_label = federal_sp42_label()
+    overall = _strip_embedded_additional_checks(
+        _compact_inline_newlines(comparison.overall_summary)
+    )
     lines = [
         f"<b>{_greeting_for_comparison(comparison.business_type, region_a.name_locative, region_b.name_locative)}</b>",
         f"🏛 {region_a.display_name} — правовое регулирование: {_esc(region_a.document_title)} "
@@ -1620,7 +1630,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         f"(проверено {region_b.last_verified})",
         f"📜 Федеральные нормы: {_esc(sp_label)}.",
         "",
-        _esc(_compact_inline_newlines(comparison.overall_summary)),
+        _esc(overall),
         "",
     ]
 
@@ -1632,7 +1642,6 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         lines.append("<b>Чем отличаются:</b>")
         lines.append("")
         groups = _group_by_category(differences)
-        diff_number = 1
         for category in get_settings().requirement_categories:
             category_diffs = groups.get(category) or []
             if not category_diffs:
@@ -1645,9 +1654,14 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                     "По данному параметру сопоставляются общие положения "
                     "нормативных правовых актов:"
                 )
-            for diff in specific + general:
-                summary = _compact_inline_newlines(diff.summary)
-                lines.append(f"{diff_number}. {_esc(summary)}")
+            # нумерация с 1 в каждой категории
+            for index, diff in enumerate(specific + general, start=1):
+                if index > 1:
+                    lines.append("")
+                summary = _strip_embedded_additional_checks(
+                    _compact_inline_newlines(diff.summary)
+                )
+                lines.append(f"{index}. {_esc(summary)}")
                 lines.append(
                     _format_compare_side(
                         comparison.region_a,
@@ -1666,7 +1680,6 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                         _COMPARE_SIDE_EMOJI_B,
                     )
                 )
-                diff_number += 1
             lines.append("")
     else:
         lines.append("<b>Чем отличаются:</b>")
@@ -1684,7 +1697,9 @@ def _render_comparison(comparison: ComparisonResult) -> str:
             level = _effective_source_level(item.citation, item.source_level)
             source_code = FEDERAL_CODE if level == "федеральный" else comparison.region_a
             source = _format_item_source(item.citation, level, source_code)
-            desc = _compact_inline_newlines(item.description)
+            desc = _strip_embedded_additional_checks(
+                _compact_inline_newlines(item.description)
+            )
             lines.append(f"{index}. {_esc(desc)} {source}".rstrip())
         lines.append("")
     elif not differences:
@@ -1728,13 +1743,32 @@ def _sanitize_foreign_fz_refs(text: str) -> str:
     return _FOREIGN_FZ_RE.sub(_replace, source)
 
 
+def _strip_embedded_additional_checks(text: str) -> str:
+    """Убирает из полей LLM встроенный блок доп. проверок (его добавляет рендер)."""
+    cleaned = _ADDITIONAL_CHECKS_BLOCK_RE.sub("", text or "")
+    # одиночный заголовок без списка
+    cleaned = _ADDITIONAL_CHECKS_HEADING_RE.sub("", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def _dedupe_additional_checks_blocks(text: str) -> str:
     """Оставляет один блок «Что требуется проверить дополнительно» (последний)."""
     source = text or ""
     matches = list(_ADDITIONAL_CHECKS_BLOCK_RE.finditer(source))
     if len(matches) <= 1:
-        return source
-    parts: list[str] = []
+        # на всякий случай: несколько голых заголовков подряд
+        headings = list(_ADDITIONAL_CHECKS_HEADING_RE.finditer(source))
+        if len(headings) <= 1:
+            return source
+        parts: list[str] = []
+        cursor = 0
+        for match in headings[:-1]:
+            parts.append(source[cursor : match.start()])
+            cursor = match.end()
+        parts.append(source[cursor:])
+        return re.sub(r"\n{3,}", "\n\n", "".join(parts))
+    parts = []
     cursor = 0
     for match in matches[:-1]:
         parts.append(source[cursor : match.start()])
@@ -1763,25 +1797,63 @@ def _humanize_curated_citation_tokens(text: str) -> str:
     return _CURATED_CITATION_IN_PROSE_RE.sub(_replace, text or "")
 
 
-def _polish_response_text(text: str) -> str:
-    """Связные переходы между регионами и отсечение артефактов (списки чисел, /с/)."""
+def _normalize_doc_number_sign(text: str) -> str:
+    """Латинская N перед номером НПА → № (как принято в РФ)."""
+    return _LATIN_N_BEFORE_DOC_NUM_RE.sub("№", text or "")
+
+
+def _replace_semicolons(text: str) -> str:
+    """Точки с запятой → точка / союз; без канцелярской склейки."""
     cleaned = text or ""
-    # «…центров; в Республике…» → «…центров. А в Республике…»
     cleaned = re.sub(r";\s*в\s+", ". А в ", cleaned)
     cleaned = re.sub(r";\s*а\s+в\s+", ". А в ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r";\s*обязательн", ". При этом обязательн", cleaned, flags=re.IGNORECASE)
-    # оставшиеся «;» между смысловыми частями — точка (не канцелярская склейка)
+    cleaned = re.sub(r";\s*при\s+наличии", ". При наличии", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r";\s*при\s+этом", ". При этом", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r";\s+(?=[А-ЯЁA-Z])", ". ", cleaned)
-    # новый абзац перед другим субъектом (verify_deploy ждёт \n\n)
-    cleaned = re.sub(r"\.\s+В\s+", ".\n\nВ ", cleaned)
-    cleaned = re.sub(r"\.\s+А\s+в\s+", ".\n\nА в ", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\.\s+Общим\s+", ".\n\nОбщим ", cleaned)
+
+    def _lower_after_semi(match: re.Match[str]) -> str:
+        letter = match.group(1)
+        return ". " + letter.upper()
+
+    cleaned = re.sub(r";\s*([а-яёa-z])", _lower_after_semi, cleaned)
+    cleaned = cleaned.replace(";", ".")
+    return cleaned
+
+
+def _split_region_paragraphs_safe(text: str) -> str:
+    """Абзац перед другим субъектом — только вне нумерованных пунктов сравнения."""
+    parts: list[str] = []
+    for line in (text or "").split("\n"):
+        stripped = line.lstrip()
+        skip = bool(
+            re.match(r"\d+\.\s", stripped)
+            or stripped.startswith(("🔹", "🔸", "•"))
+        )
+        if skip:
+            parts.append(line)
+            continue
+        updated = re.sub(r"\.\s+В\s+", ".\n\nВ ", line)
+        updated = re.sub(r"\.\s+А\s+в\s+", ".\n\nА в ", updated, flags=re.IGNORECASE)
+        updated = re.sub(r"\.\s+Общим\s+", ".\n\nОбщим ", updated)
+        parts.append(updated)
+    return "\n".join(parts)
+
+
+def _polish_response_text(text: str) -> str:
+    """Связные переходы между регионами и отсечение артефактов (списки чисел, /с/)."""
+    cleaned = text or ""
+    # сначала дедуп доп. проверок — до phrase-collapse (иначе блок >220 символов ломается)
+    cleaned = _dedupe_additional_checks_blocks(cleaned)
+    cleaned = _replace_semicolons(cleaned)
+    cleaned = _split_region_paragraphs_safe(cleaned)
     # убрать гигантские перечни чисел и цепочки «1.1.1.1…»
     cleaned = _NUMBER_LIST_ARTIFACT_RE.sub("\n", cleaned)
     cleaned = _DOTTED_RUNAWAY_RE.sub("", cleaned)
     cleaned = _collapse_phrase_loops(cleaned)
     cleaned = _dedupe_additional_checks_blocks(cleaned)
     cleaned = _humanize_curated_citation_tokens(cleaned)
+    cleaned = _normalize_doc_number_sign(cleaned)
     cleaned = _fix_region_spellings(cleaned)
     cleaned = _strip_junk_citation_tokens(cleaned)
     cleaned = _sanitize_foreign_fz_refs(cleaned)
@@ -1815,6 +1887,7 @@ def _polish_response_text(text: str) -> str:
         flags=re.IGNORECASE,
     )
     cleaned = re.sub(r"\(\s*;\s*\)", "", cleaned)
+    cleaned = re.sub(r"\)\s*\)+", ")", cleaned)
     cleaned = re.sub(r"\(\s*\)", "", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)

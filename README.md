@@ -98,22 +98,18 @@ LLM вынесен за абстракцию провайдера: в проде
 
 - Prometheus-метрики на `GET /metrics` (в т.ч. `regiobuild_guardrail_blocks_total`,
   latency и HTTP-ошибки через instrumentator)
-- Grafana Cloud: креды remote write / scrape в env, описание пайплайна —
-  [`docs/GRAFANA.md`](docs/GRAFANA.md)
 - Sentry — по `SENTRY_DSN`
 
-Метрики и дашборд-контур заложены в продукт; подключение scrape или Alloy remote
-write к публичному API завершает связку Cloud ↔ runtime.
-
-Прод на VPS Aeza (nginx, бэкапы, Prometheus/Alertmanager, CI/CD по SSH):  
-[`docs/PRODUCTION.md`](docs/PRODUCTION.md).
+Прод — VPS Aeza: nginx, API, Telegram-бот, Prometheus/Alertmanager, выкладка
+по SSH (`docker-compose.prod.yml`, `scripts/deploy_remote.sh`).
 
 ### Качество
 
 Hit rate = доля кейсов, где хотя бы один ожидаемый `section_number` попал в
 retrieval-контекст агента (`python -m scripts.eval_golden`, режим retrieval).
 Это **не** «юридически верный ответ» и не разрешение строить объект — только
-метрика якорей. Дисклеймер: [`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
+метрика якорей. Дисклеймер:
+[`docs/LEGAL_DISCLAIMER.md`](docs/LEGAL_DISCLAIMER.md).
 
 Цели: **100** кейсов в `data/eval/golden.jsonl`, hit rate **≥ 95%** (стремиться
 к 99%). Порог в `eval_golden` для retrieval — 0.95.
@@ -146,8 +142,7 @@ curated-якорей в контекст и без поиска только п�
 Pytest в CI (облегчённый прогон без torch). Smoke после выкладки — проверка,
 что контур жив, без ручного «тыканья» вслепую.
 
-Архитектура: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).  
-Выкладка: [`docs/PRODUCTION.md`](docs/PRODUCTION.md).
+Архитектура: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 <p align="center">
   <img src="docs/screenshots/02-bot-start.png" alt="Старт бота" width="360"/>
@@ -312,8 +307,8 @@ pip install -r requirements.txt
 copy .env.example .env         # Linux/Mac: cp .env.example .env
 ```
 
-В `.env` — учётные данные GigaChat, при необходимости токен бота, параметры
-Qdrant и (опционально) Grafana Cloud. Для локальной Chroma:
+В `.env` — учётные данные GigaChat, при необходимости токен бота и параметры
+Qdrant. Для локальной Chroma:
 `pip install -r requirements-legacy-chroma.txt`.
 
 ```bash
@@ -326,8 +321,8 @@ python -m app.bot.main
 ```
 
 Либо `docker compose up --build`. Прод на VPS:
-`docker compose -f docker-compose.prod.yml --env-file .env up -d --build`
-(см. [`docs/PRODUCTION.md`](docs/PRODUCTION.md)). Postgres: `docker-compose.postgres.yml`.
+`docker compose -f docker-compose.prod.yml --env-file .env up -d --build`.
+Postgres: `docker-compose.postgres.yml`.
 
 ```bash
 pytest

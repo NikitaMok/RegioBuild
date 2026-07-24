@@ -45,7 +45,7 @@ def federal_sp42_label() -> str:
 
 
 _NPA_NUM_RE = re.compile(
-    r"(?P<kind>Постановление|Приказ|СП)\b.*?N\s*(?P<num>[\w\-/\.]+)",
+    r"(?P<kind>Постановление|Приказ|СП)\b.*?(?:N|№)\s*(?P<num>[\w\-/\.]+)",
     re.IGNORECASE | re.DOTALL,
 )
 

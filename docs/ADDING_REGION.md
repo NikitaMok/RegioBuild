@@ -72,7 +72,7 @@ python -m scripts.eval_golden
 
 ## 7. Прод
 
-Пуш → выкладка на VPS (см. `docs/PRODUCTION.md`) →
+Пуш → выкладка на VPS (`docker-compose.prod.yml`, `scripts/deploy_remote.sh`) →
 `/health` → smoke-запрос по новому региону через `/api/v1/info`.
 
 Регион появляется в `/regions`, клавиатуре бота и валидации API

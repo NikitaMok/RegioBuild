@@ -422,9 +422,9 @@ def test_render_comparison_uses_correct_npa_titles_for_each_region() -> None:
     )
     text = nodes._render_comparison(comparison)
 
-    assert "N 713/30" in text
-    assert "N 78" in text
-    assert text.index("N 713/30") < text.index("N 78")
+    assert "№ 713/30" in text
+    assert "№ 78" in text
+    assert text.index("№ 713/30") < text.index("№ 78")
     assert "Различий не обнаружено" in text
     assert "🏛" in text
     assert "⚖" in text
@@ -791,6 +791,60 @@ def test_polish_humanizes_curated_sanpin_token() -> None:
     cleaned = nodes._polish_response_text("Норма действует (п. СанПиН/7.1.3) для объекта.")
     assert "СанПиН/7.1.3" not in cleaned
     assert "п. 7.1.3" in cleaned
+
+
+def test_render_comparison_restarts_numbering_per_category() -> None:
+    comparison = ComparisonResult(
+        region_a="moscow_oblast",
+        region_b="tatarstan",
+        business_type="склад",
+        overall_summary="Есть отличия по двум категориям.",
+        differences=[
+            DifferenceItem(
+                category="градостроительные",
+                region_a_value="Норма А",
+                region_b_value="Норма Б",
+                summary="Отличие по парковке",
+                citation_a="1.1",
+                citation_b="1.2",
+            ),
+            DifferenceItem(
+                category="санитарные_экологические",
+                region_a_value="СЗЗ по федеральному акту",
+                region_b_value="СЗЗ по региональной отсылке",
+                summary="Отличие по СЗЗ",
+                citation_a="2.1",
+                citation_b="2.2",
+            ),
+        ],
+        common_requirements=[],
+    )
+    text = nodes._render_comparison(comparison)
+    assert "Градостроительные нормы:</b>\n1. Отличие по парковке" in text
+    sanitary_pos = text.index("Санитарные и экологические нормы:")
+    after = text[sanitary_pos : sanitary_pos + 120]
+    assert "\n1. Отличие по СЗЗ" in after
+    assert "\n2. Отличие по СЗЗ" not in after
+
+
+def test_polish_replaces_latin_n_with_numero_sign() -> None:
+    cleaned = nodes._polish_response_text(
+        "Постановление Правительства МО от 17.08.2015 N 713/30 "
+        "и приложение N 10."
+    )
+    assert "N 713" not in cleaned
+    assert "N 10" not in cleaned
+    assert "№ 713/30" in cleaned
+    assert "№ 10" in cleaned
+
+
+def test_polish_removes_remaining_semicolons() -> None:
+    cleaned = nodes._polish_response_text(
+        "мойки до двух постов — 50 м; мойки от 2 до 5 постов — 100 м; "
+        "итоговый размер уточняется проектом СЗЗ."
+    )
+    assert ";" not in cleaned
+    assert "50 м. Мойки от 2 до 5" in cleaned
 
 
 def test_render_comparison_has_single_blank_between_blocks() -> None:

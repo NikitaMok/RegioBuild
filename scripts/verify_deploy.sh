@@ -190,6 +190,16 @@ if "Чем отличаются:</b>\n\n<b>Градостроительные н
     errors.append("RENDER: нет Enter между «Чем отличаются» и категорией")
 if "\n\n\n" in cmp_text:
     errors.append("RENDER: тройные пустые строки в сравнении")
+if "№ 713/30" not in cmp_text and "№713/30" not in cmp_text:
+    errors.append("RENDER: нет знака № у номера постановления МО")
+
+semi = _polish_response_text("норма А; норма Б; итог.")
+if ";" in semi:
+    errors.append("POLISH: точки с запятой не убраны")
+
+latin_n = _polish_response_text("акт от 17.08.2015 N 713/30")
+if "N 713" in latin_n or "№ 713/30" not in latin_n:
+    errors.append("POLISH: латинская N не заменена на №")
 
 if "специальные требования по указанному вопросу не установлены" not in _MISSING_REGION_VALUE.lower():
     errors.append("MISSING: нет юридической фразы об отсутствии требований")

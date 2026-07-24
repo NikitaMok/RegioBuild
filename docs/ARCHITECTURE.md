@@ -47,19 +47,17 @@ query_transform → retrieve → classify → rerank → LLM → format/guardrai
   `api.giga.chat`). YandexGPT в коде есть, failover по умолчанию выключен.
 - **Нормализация типа объекта до retrieval.** Длинные фразы и падежи плохо
   матчятся с канцеляритом НПА: сначала whitelist/корни, модель — если не вышло.
-- **Гибридный retrieval.** Dense (Qdrant) + лёгкий BM25 по кандидатам; при
-  `VECTOR_BACKEND=chroma` — тот же контракт на legacy-индексе.
-- **Embeddings.** В проде и в Docker-образе — `fastembed` (ONNX, без PyTorch в
-  RAM). Опционально enterprise: `sentence_transformers` (в т.ч. e5-large) через
-  `EMBEDDING_BACKEND` и `requirements-enterprise-embeddings.txt`. Индекс и
-  runtime должны совпадать по backend.
+- **Гибридный retrieval.** Dense (Qdrant) + лёгкий BM25 по кандидатам.
+- **Embeddings.** В проде — `fastembed` (ONNX). Индекс и runtime должны
+  совпадать по backend.
 - **Федеральный фон.** `RU-FED` не выбирается как «регион» в UI. Региональный
-  акт в приоритете; федеральные требования выводятся отдельным блоком с
-  `source_level` в API / явным разделом в ответе бота.
+  акт в приоритете; федеральные требования — отдельным блоком.
 - **Grounding и guardrail.** Пункты из JSON модели сверяются с
-  `section_number` чанков; лишние цифры в ответе могут заблокировать выдачу.
-  Нет опоры в корпусе — честный отказ, без нормы «от себя».
-- **API отдельно от бота.** Telegram ходит на `/info` и `/compare`; есть также
+  `section_number` чанков. Нет опоры в корпусе — честный отказ.
+- **Формат ответа.** Нумерация различий с 1 в каждой категории; знак номера
+  НПА — «№»; точки с запятой в пользовательском тексте убираются при
+  полировке; блок доп. проверок — один раз на ответ.
+- **API отдельно от бота.** Telegram ходит на `/info` и `/compare`; есть
   `/api/v1/info` и `/api/v1/compare` для внешнего контура.
 
 ## Роли в runtime
@@ -71,26 +69,23 @@ query_transform → retrieve → classify → rerank → LLM → format/guardrai
 | `api` | FastAPI, warmup embeddings, `/metrics` |
 | `bot` | aiogram long polling → HTTP к API |
 
-Локально удобен `docker compose`. Прод — VPS Aeza
-([`PRODUCTION.md`](PRODUCTION.md)): nginx, API, bot, Prometheus/Alertmanager.
-Тот же Dockerfile подходит и для PaaS-подобных площадок (см. исторический
-[`BOTHOST_CHECKLIST.md`](BOTHOST_CHECKLIST.md)).
-
-`WARMUP_ON_START=delayed` предпочтительнее `immediate` на машинах с ~2 GB RAM;
-на части PaaS — `off` (модель поднимается на первом запросе).
+Прод — VPS (nginx, API, bot, Prometheus/Alertmanager). Compose:
+`docker-compose.prod.yml`.
 
 ## Данные
 
-| Слой | Назначение |
+| Путь | Назначение |
 |------|------------|
 | `data/raw/docs` | исходные PDF (не в git) |
 | `data/structured` | clauses/chunks после `parse_pdf_docs` |
-| `config/documents.yaml` | манифест ingest (federal/regional; municipal выключен) |
+| `config/documents.yaml` | манифест ingest |
 | `config/regions.yaml` | ISO-коды, алиасы, реквизиты актов |
-| Qdrant Cloud / локальный | коллекция `regiobuild_normative` |
-| `data/chroma` | legacy-индекс (опционально) |
+| Qdrant Cloud | коллекция `regiobuild_normative` |
 | `data/curated` | точечные выдержки (123-ФЗ, СанПиН и др.) |
 | SQL | документы, чанки, `query_logs` |
+
+Продуктовый скоуп: **5 субъектов + федеральный слой**. Архитектура допускает
+расширение без ломки контрактов (см. [`ADDING_REGION.md`](ADDING_REGION.md)).
 
 ## Observability
 
@@ -98,6 +93,3 @@ query_transform → retrieve → classify → rerank → LLM → format/guardrai
 - Sentry по `SENTRY_DSN`
 - LLM cache: memory + disk
 - Дневной лимит запросов на `telegram_user_id`
-- Grafana Cloud: креды remote write / scrape в env; пайплайн —
-  [`GRAFANA.md`](GRAFANA.md). Одни переменные без scrape/Alloy в Cloud не
-  заполняют Active Series — нужен явный pipe к публичному `/metrics` API.
