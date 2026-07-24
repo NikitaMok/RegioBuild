@@ -27,8 +27,13 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Fail if deploy secrets missing
+        if: steps.gate.outputs.skip == 'true'
+        run: |
+          echo "Deploy secrets отсутствуют — выкладка невозможна. Задайте DEPLOY_HOST и DEPLOY_SSH_KEY."
+          exit 1
+
       - name: Deploy over SSH
-        if: steps.gate.outputs.skip != 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -39,16 +44,24 @@ jobs:
           script: |
             set -euo pipefail
             ROOT=/opt/regiobuild
+            EXPECTED="${{ github.sha }}"
             if [ ! -d "$ROOT/.git" ]; then
               git clone https://github.com/NikitaMok/RegioBuild.git "$ROOT"
             fi
             cd "$ROOT"
+            # Сначала подтягиваем КОД (иначе на сервере старый deploy_remote.sh без verify)
+            git fetch origin
+            git reset --hard "$EXPECTED"
+            test "$(git rev-parse HEAD)" = "$EXPECTED"
+            echo "server HEAD=$(git rev-parse --short HEAD) matches github.sha"
             export DEPLOY_PATH="$ROOT"
             export DEPLOY_BRANCH=main
-            # SHA из GitHub Actions — если на сервере другой коммит, verify упадёт
-            export EXPECTED_SHA="${{ github.sha }}"
+            export EXPECTED_SHA="$EXPECTED"
+            chmod +x scripts/deploy_remote.sh scripts/verify_deploy.sh
+            # deploy_remote снова сделает fetch/reset + build + verify
             bash scripts/deploy_remote.sh
-            # двойной контроль: verify ещё раз явно (скрипт уже внутри deploy, но лог читаемее)
-            export EXPECTED_SHA="${{ github.sha }}"
+            # финальный контроль: тот же SHA + UX-маркеры в running API
+            export EXPECTED_SHA="$EXPECTED"
             bash scripts/verify_deploy.sh
-            echo "CI deploy gate passed for ${{ github.sha }}"
+            test "$(git rev-parse HEAD)" = "$EXPECTED"
+            echo "CI deploy gate passed for $EXPECTED"
