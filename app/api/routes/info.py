@@ -24,7 +24,7 @@ def get_business_requirements(payload: InfoRequest, request: Request) -> AgentRe
     if region_code not in REGIONS:
         raise HTTPException(status_code=422, detail=f"неизвестный регион: {payload.region_code}")
     if len(payload.business_type) > MAX_QUERY_LENGTH:
-        raise HTTPException(status_code=422, detail="слишком длинный тип бизнеса")
+        raise HTTPException(status_code=422, detail="слишком длинный тип объекта")
     if looks_like_prompt_injection(payload.business_type):
         raise HTTPException(status_code=422, detail="запрос отклонён политикой безопасности")
 

@@ -30,7 +30,7 @@ def compare_regions(payload: CompareRequest, request: Request) -> AgentResponse:
     if region_a == region_b:
         raise HTTPException(status_code=422, detail="для сравнения нужны два разных региона")
     if len(payload.business_type) > MAX_QUERY_LENGTH:
-        raise HTTPException(status_code=422, detail="слишком длинный тип бизнеса")
+        raise HTTPException(status_code=422, detail="слишком длинный тип объекта")
     if looks_like_prompt_injection(payload.business_type):
         raise HTTPException(status_code=422, detail="запрос отклонён политикой безопасности")
 

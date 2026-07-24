@@ -67,9 +67,31 @@ _RETRIEVAL_QUERY_TEMPLATES: tuple[str, ...] = (
 
 
 def _retrieval_queries(business_type: str) -> list[str]:
+    """Русские фразы по осям: parking/fire/sanitary всегда в приоритете."""
     canon = _canon_business_type(business_type)
     phrases = query_phrases_for_object(canon)
-    return phrases[:10] or [t.format(bt=canon or business_type) for t in _RETRIEVAL_QUERY_TEMPLATES]
+    if not phrases:
+        return [t.format(bt=canon or business_type) for t in _RETRIEVAL_QUERY_TEMPLATES]
+    # защищаем ключевые оси (не отрезаем хвостом лимита)
+    priority_markers = (
+        "парковк",
+        "пожар",
+        "санитар",
+        "доступност",
+        "эвакуац",
+        "машино-мест",
+        "123-фз",
+    )
+    head = [p for p in phrases if any(m in p.lower() for m in priority_markers)]
+    rest = [p for p in phrases if p not in head]
+    ordered = []
+    seen: set[str] = set()
+    for p in [canon or business_type, *head, *rest]:
+        if p and p not in seen:
+            seen.add(p)
+            ordered.append(p)
+    return ordered[:14]
+
 
 # короткие маркеры регионов больше не используем в UI — тематические эмодзи
 _COMPARE_SIDE_EMOJI_A = "🔹"
@@ -78,13 +100,14 @@ _COMPARE_SIDE_EMOJI_B = "🔸"
 MAX_WORDS_FOR_RAW_BUSINESS_TYPE = 3
 
 INVALID_BUSINESS_TYPE_ERROR = (
-    "Не удалось распознать тип бизнеса. Укажите объект коротко "
-    "(например: кафе, автомойка, склад, медицинский центр и т.д.)."
+    "Не удалось распознать тип объекта капитального строительства. "
+    "Укажите объект коротко (например: кафе, автомойка, склад, медицинский центр и т.д.)."
 )
 
 FORBIDDEN_CONTENT_ERROR = (
     "Запрос выглядит как просьба про секреты или доступы. "
-    "Я помогаю только со строительными нормативами для типа бизнеса."
+    "Я помогаю только с нормативами градостроительного проектирования "
+    "для объектов капитального строительства."
 )
 
 _MISSING_IN_FRAGMENTS_RE = re.compile(
@@ -212,16 +235,17 @@ def understand_query(state: AgentState) -> AgentState:
 
 
 def query_transform(state: AgentState) -> AgentState:
-    """Сленг/длинная фраза → канонический поисковый запрос (лёгкий LLM или без него)."""
+    """Сленг/длинная фраза → канонический поисковый запрос (русские оси категорий)."""
     if state.get("error"):
         return state
     business_type = state.get("business_type") or ""
     raw = state.get("business_type_raw") or business_type
-    # если уже извлекли короткий тип — transformation = тип + ключевые категории
     cats = state.get("categories") or categories_for_object(business_type)
-    transformed = f"{business_type} " + " ".join(cats[:3])
+    # русские фразы, не английские коды parking/fire
+    phrases = _retrieval_queries(business_type)
+    transformed = " ".join(phrases[:6]).strip() or business_type
     if len((raw or "").split()) <= 4:
-        return {**state, "transformed_query": transformed.strip(), "categories": cats}
+        return {**state, "transformed_query": transformed, "categories": cats}
 
     try:
         provider = get_llm_provider()
@@ -238,10 +262,12 @@ def query_transform(state: AgentState) -> AgentState:
         )
         text = (out or "").strip().strip("«»\"'")
         if text:
-            return {**state, "transformed_query": text, "categories": cats}
+            # сохраняем оси категорий после LLM-перефраза
+            merged = f"{text} {' '.join(phrases[1:5])}".strip()
+            return {**state, "transformed_query": merged, "categories": cats}
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"query_transform fallback: {exc}")
-    return {**state, "transformed_query": transformed.strip(), "categories": cats}
+    return {**state, "transformed_query": transformed, "categories": cats}
 
 
 def rerank_retrieved(state: AgentState) -> AgentState:
@@ -254,8 +280,8 @@ def rerank_retrieved(state: AgentState) -> AgentState:
     for key in ("retrieved_a", "retrieved_b", "retrieved_federal"):
         chunks = list(state.get(key) or [])
         if chunks:
-            # top-3 для LLM после hybrid top-N
-            new_state[key] = rerank_chunks(query, chunks, top_n=min(3, len(chunks)))
+            # держим больше осей (парковка / СЗЗ / пожар), не схлопываем в 3
+            new_state[key] = rerank_chunks(query, chunks, top_n=min(8, len(chunks)))
     return new_state
 
 
@@ -735,11 +761,34 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
                         diff.region_b_value, region_a.display_name, region_b.display_name
                     )
                 ),
-                "citation_a": _ground_optional_citation(diff.citation_a, chunks_a),
-                "citation_b": _ground_optional_citation(diff.citation_b, chunks_b),
+                "citation_a": _ground_optional_citation(
+                    diff.citation_a, chunks_a, side_region=state["region_a"]
+                ),
+                "citation_b": _ground_optional_citation(
+                    diff.citation_b, chunks_b, side_region=state["region_b"]
+                ),
             }
         )
         for diff in comparison.differences
+    ]
+    cleaned_differences = [
+        diff.model_copy(
+            update={
+                "region_a_value": _strip_foreign_region_npa(
+                    diff.region_a_value, keep_region=state["region_a"]
+                ),
+                "region_b_value": _strip_foreign_region_npa(
+                    diff.region_b_value, keep_region=state["region_b"]
+                ),
+                "summary": _strip_foreign_region_npa(
+                    diff.summary, keep_region=None
+                ),
+                "source_level": _effective_source_level(
+                    diff.citation_a or diff.citation_b, diff.source_level
+                ),
+            }
+        )
+        for diff in cleaned_differences
     ]
     cleaned_differences = _filter_object_mismatched_differences(
         cleaned_differences, state["business_type"]
@@ -750,10 +799,13 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
             "region_a": state["region_a"],
             "region_b": state["region_b"],
             "business_type": state["business_type"],
-            "overall_summary": _fix_region_spellings(
-                _replace_region_placeholders(
-                    comparison.overall_summary, region_a.display_name, region_b.display_name
-                )
+            "overall_summary": _strip_foreign_region_npa(
+                _fix_region_spellings(
+                    _replace_region_placeholders(
+                        comparison.overall_summary, region_a.display_name, region_b.display_name
+                    )
+                ),
+                keep_region=None,
             ),
             "common_requirements": grounded_commons,
             "differences": cleaned_differences,
@@ -940,15 +992,45 @@ def _citation_suffix(citation: str, source_level: str) -> str:
     return f"({_esc(punkt)})"
 
 
-def _ground_optional_citation(citation: str, chunks: list[RetrievedChunk]) -> str:
-    """Пустой/«пункт не указан» оставляем; выдуманный номер обнуляем."""
+def _ground_optional_citation(
+    citation: str,
+    chunks: list[RetrievedChunk],
+    *,
+    side_region: str | None = None,
+) -> str:
+    """Пустой/«пункт не указан» оставляем; выдуманный номер обнуляем.
+
+    side_region: citation должна опираться на чанк этого региона или федеральный.
+    """
     raw = (citation or "").strip()
     if not raw or raw.lower() in {"пункт не указан", "без номера", "n/a", "-", "—"}:
         return ""
-    if _citation_matches_chunks(raw, chunks):
+    scoped = chunks
+    if side_region:
+        scoped = [
+            c
+            for c in chunks
+            if (c.region_code or "") in {side_region, FEDERAL_CODE, "RU-FED"}
+            or _citation_looks_federal(raw)
+        ] or chunks
+    if _citation_matches_chunks(raw, scoped):
         return raw
     logger.warning(f"отброшена citation без опоры на чанки: {raw!r}")
     return ""
+
+
+def _citation_looks_federal(citation: str) -> bool:
+    lowered = (citation or "").lower()
+    return any(
+        marker in lowered
+        for marker in ("123", "фз", "санпин", "сп 42", "сп42", "сп 396")
+    )
+
+
+def _effective_source_level(citation: str, fallback: str) -> str:
+    if _citation_looks_federal(citation):
+        return "федеральный"
+    return fallback if fallback in {"федеральный", "региональный"} else "региональный"
 
 
 _WORD_ONLY_SECTION = re.compile(r"^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\-]*$")
@@ -1026,7 +1108,7 @@ def _is_trivial_clause(clause: str) -> bool:
     return False
 
 
-def _collapse_phrase_loops(text: str, *, min_len: int = 40, min_repeats: int = 3) -> str:
+def _collapse_phrase_loops(text: str, *, min_len: int = 24, min_repeats: int = 2) -> str:
     """Срезает подряд идущие одинаковые куски текста (зацикливание LLM)."""
     if not text or len(text) < min_len * min_repeats:
         return text
@@ -1061,6 +1143,41 @@ def _fix_region_spellings(text: str) -> str:
     for pattern, replacement in _REGION_SPELLING_FIXES:
         cleaned = pattern.sub(replacement, cleaned)
     return cleaned
+
+
+def _strip_foreign_region_npa(text: str, *, keep_region: str | None) -> str:
+    """Убирает реквизиты чужих региональных НПА из текста стороны сравнения."""
+    from app.core.regions import REGIONS
+
+    cleaned = text or ""
+    keep_title = ""
+    if keep_region and keep_region in REGIONS:
+        keep_title = REGIONS[keep_region].document_title
+    for code, region in REGIONS.items():
+        if keep_region and code == keep_region:
+            continue
+        title = region.document_title
+        if not title or (keep_title and title == keep_title):
+            continue
+        # полное название и укороченные «Постановление … Новосибирской области»
+        if title in cleaned:
+            cleaned = cleaned.replace(title, "")
+        # типичная путаница: «п. 2 Постановления … Новосибирской …» в блоке СО
+        loc = region.name_locative
+        cleaned = re.sub(
+            rf"(?i)(?:п(?:ункт)?\.?\s*)?\d+(?:\.\d+)*\s+"
+            rf"(?:Постановлени\w+|Приказ\w+)\s+[^.«»]{{0,80}}{re.escape(loc)}[^.«»]{{0,120}}",
+            "",
+            cleaned,
+        )
+        cleaned = re.sub(
+            rf"(?i)(?:Постановлени\w+|Приказ\w+)\s+[^.«»]{{0,80}}{re.escape(loc)}[^.«»]{{0,80}}",
+            "",
+            cleaned,
+        )
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\(\s*\)", "", cleaned)
+    return cleaned.strip()
 
 
 def _strip_junk_citation_tokens(text: str) -> str:
@@ -1236,7 +1353,8 @@ def _format_compare_side(
             f"  {side_emoji} <b>{_esc(region.display_name)}</b>: "
             f"{_esc(humanized)}"
         )
-    if source_level == "федеральный":
+    level = _effective_source_level(citation, source_level)
+    if level == "федеральный":
         npa = full_federal_cite_from_citation(citation)
     else:
         npa = get_region(region_code).document_title
@@ -1467,8 +1585,9 @@ def _render_comparison(comparison: ComparisonResult) -> str:
             "Следующие требования совпадают либо одинаково опираются на федеральные нормы:"
         )
         for index, item in enumerate(commons, start=1):
-            source_code = FEDERAL_CODE if item.source_level == "федеральный" else comparison.region_a
-            source = _format_item_source(item.citation, item.source_level, source_code)
+            level = _effective_source_level(item.citation, item.source_level)
+            source_code = FEDERAL_CODE if level == "федеральный" else comparison.region_a
+            source = _format_item_source(item.citation, level, source_code)
             desc = _compact_inline_newlines(item.description)
             lines.append(f"{index}. {_esc(desc)} {source}".rstrip())
     elif not differences:

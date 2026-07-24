@@ -49,3 +49,25 @@ def test_comparison_prompt_includes_shared_federal_block() -> None:
     assert "федеральных норм" in prompt
     assert "common_requirements" in prompt
     assert "Московская область" in prompt
+    assert "[регион=" in prompt
+    assert "[НПА=" in prompt
+
+
+def test_format_chunks_keeps_longer_budget_for_tables() -> None:
+    from app.llm.prompts import _format_chunks
+
+    long_row = "строка таблицы " + ("x" * 700)
+    formatted = _format_chunks(
+        [
+            RetrievedChunk(
+                id="t",
+                text=long_row,
+                region_code="RU-KDA",
+                section_number="табл.108",
+                category=None,
+                distance=0.1,
+            )
+        ]
+    )
+    assert "табл.108" in formatted
+    assert len(formatted) > 600

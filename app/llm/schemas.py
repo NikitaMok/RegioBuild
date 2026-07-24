@@ -86,7 +86,7 @@ class RequirementItem(BaseModel):
     is_specific: bool = Field(
         default=True,
         description=(
-            "true — норма прямо про этот тип бизнеса; false — общая норма "
+            "true — норма прямо про этот тип объекта; false — общая норма "
             "градостроительного проектирования, которая просто применима к нему"
         ),
     )
@@ -141,7 +141,7 @@ class DifferenceItem(BaseModel):
     is_specific: bool = Field(
         default=True,
         description=(
-            "true — норма прямо про этот тип бизнеса; false — общая норма "
+            "true — норма прямо про этот тип объекта; false — общая норма "
             "градостроительного проектирования, которая просто применима к нему"
         ),
     )

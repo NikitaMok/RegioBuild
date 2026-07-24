@@ -36,7 +36,7 @@ def test_understand_query_trims_business_type_and_clears_error() -> None:
 
 def test_understand_query_rejects_broken_business_type() -> None:
     state = nodes.understand_query({"business_type": "Парко вка возле тц", "region_a": "moscow_oblast"})
-    assert "Не удалось распознать тип бизнеса" in state["error"]
+    assert "Не удалось распознать тип объекта" in state["error"]
 
 
 def test_normalize_business_type_skips_llm_for_short_phrase(monkeypatch) -> None:
@@ -66,7 +66,7 @@ def test_normalize_business_type_rejects_unknown_short_type(monkeypatch) -> None
     monkeypatch.setattr(nodes, "get_llm_provider", _fail_if_called)
 
     state = nodes.normalize_business_type({"business_type": "квазар"})
-    assert "Не удалось распознать тип бизнеса" in state["error"]
+    assert "Не удалось распознать тип объекта" in state["error"]
 
 
 def test_understand_query_rejects_forbidden_content() -> None:
@@ -76,7 +76,7 @@ def test_understand_query_rejects_forbidden_content() -> None:
 
 def test_understand_query_rejects_unknown_business_type() -> None:
     state = nodes.understand_query({"business_type": "межгалактический порт", "region_a": "moscow_oblast"})
-    assert "Не удалось распознать тип бизнеса" in state["error"]
+    assert "Не удалось распознать тип объекта" in state["error"]
 
 
 class _FakeProvider:
@@ -124,7 +124,7 @@ def test_normalize_business_type_maps_unknown_marker_to_error(monkeypatch) -> No
     raw_text = "пожалуйста помоги мне с моим домашним заданием по математике сегодня"
 
     state = nodes.normalize_business_type({"business_type": raw_text})
-    assert "Не удалось распознать тип бизнеса" in state["error"]
+    assert "Не удалось распознать тип объекта" in state["error"]
 
 
 def test_normalize_business_type_falls_back_to_raw_text_on_llm_error(monkeypatch) -> None:
@@ -739,6 +739,29 @@ def test_format_item_source_omits_polozheniya_without_punkt() -> None:
     cite = nodes._format_item_source("склад", "региональный", "moscow_oblast")
     assert cite == ""
     assert "положения" not in cite.lower()
+
+
+def test_retrieval_queries_use_russian_not_english_codes() -> None:
+    phrases = nodes._retrieval_queries("торговый центр")
+    joined = " ".join(phrases).lower()
+    assert "parking" not in joined
+    assert "парков" in joined
+    assert "пожар" in joined or "123-фз" in joined
+
+
+def test_strip_foreign_region_npa_removes_other_subject_title() -> None:
+    text = (
+        "Свердловская область (п. 2 Постановления Правительства Новосибирской области "
+        "от 12.08.2015 N 303-п): сети учитываются."
+    )
+    cleaned = nodes._strip_foreign_region_npa(text, keep_region="RU-SVE")
+    assert "Новосибирской" not in cleaned
+    assert "сети учитываются" in cleaned or "Свердловская" in cleaned
+
+
+def test_effective_source_level_from_federal_citation() -> None:
+    assert nodes._effective_source_level("123-ФЗ/69", "региональный") == "федеральный"
+    assert nodes._effective_source_level("5.5.153", "региональный") == "региональный"
 
 
 def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> None:
