@@ -42,7 +42,13 @@ from app.llm.prompts import (
     build_comparison_prompt,
     build_extraction_prompt,
 )
-from app.llm.schemas import CommonRequirementItem, ComparisonResult, ExtractionResult, RequirementItem
+from app.llm.schemas import (
+    CommonRequirementItem,
+    ComparisonResult,
+    DifferenceItem,
+    ExtractionResult,
+    RequirementItem,
+)
 from app.vectorstore.types import RetrievedChunk
 from app.core.object_categories import categories_for_object, query_phrases_for_object
 from app.vectorstore.retriever import hybrid_retrieve as retrieve
@@ -663,6 +669,9 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         # коды/тип берём из запроса, не из ответа модели
         allowed_chunks = list(state.get("retrieved_a", [])) + list(state.get("retrieved_federal", []))
         grounded_items = _filter_grounded_items(extraction.items, allowed_chunks)
+        grounded_items = _filter_object_mismatched_items(
+            grounded_items, state["business_type"]
+        )
         extraction = extraction.model_copy(
             update={
                 "region_code": state["region_a"],
@@ -711,12 +720,20 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
     cleaned_differences = [
         diff.model_copy(
             update={
-                "summary": _replace_region_placeholders(diff.summary, region_a.display_name, region_b.display_name),
-                "region_a_value": _replace_region_placeholders(
-                    diff.region_a_value, region_a.display_name, region_b.display_name
+                "summary": _fix_region_spellings(
+                    _replace_region_placeholders(
+                        diff.summary, region_a.display_name, region_b.display_name
+                    )
                 ),
-                "region_b_value": _replace_region_placeholders(
-                    diff.region_b_value, region_a.display_name, region_b.display_name
+                "region_a_value": _fix_region_spellings(
+                    _replace_region_placeholders(
+                        diff.region_a_value, region_a.display_name, region_b.display_name
+                    )
+                ),
+                "region_b_value": _fix_region_spellings(
+                    _replace_region_placeholders(
+                        diff.region_b_value, region_a.display_name, region_b.display_name
+                    )
                 ),
                 "citation_a": _ground_optional_citation(diff.citation_a, chunks_a),
                 "citation_b": _ground_optional_citation(diff.citation_b, chunks_b),
@@ -724,14 +741,19 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         )
         for diff in comparison.differences
     ]
+    cleaned_differences = _filter_object_mismatched_differences(
+        cleaned_differences, state["business_type"]
+    )
     # коды/тип из запроса — модель иногда подставляет display_name и ломает рендер
     comparison = comparison.model_copy(
         update={
             "region_a": state["region_a"],
             "region_b": state["region_b"],
             "business_type": state["business_type"],
-            "overall_summary": _replace_region_placeholders(
-                comparison.overall_summary, region_a.display_name, region_b.display_name
+            "overall_summary": _fix_region_spellings(
+                _replace_region_placeholders(
+                    comparison.overall_summary, region_a.display_name, region_b.display_name
+                )
             ),
             "common_requirements": grounded_commons,
             "differences": cleaned_differences,
@@ -935,13 +957,157 @@ _NUMBER_LIST_ARTIFACT_RE = re.compile(
     r"(?:^|\n)(?:\s*(?:\d{1,4}|[–—\-])\s*(?:[,;.\s]|$)){12,}",
     re.MULTILINE,
 )
+# артефакт: зацикленная цепочка «1.1.1.1…» / «1.1.1…»
+_DOTTED_RUNAWAY_RE = re.compile(r"(?:\d+\.){7,}\d*")
 # артефакт генерации: «### /с/ /с/ /с/…» и markdown-мусор вне HTML
 _SLASH_S_ARTIFACT_RE = re.compile(
     r"(?:#{1,6}\s*)?(?:/?\s*[сcСC]\s*/\s*){2,}(?:\([^)]*\))?",
     re.IGNORECASE,
 )
 _MARKDOWN_HEADING_RE = re.compile(r"(?m)^#{1,6}\s+")
+# мусорные «п. а», «пункт МО-доп/склад» в прозе LLM
+_JUNK_CITATION_TOKEN_RE = re.compile(
+    r"(?i)\b(?:пункт|п\.)\s*(?:"
+    r"[а-яёa-z]\b|"
+    r"[а-яёa-z0-9]{1,6}-доп/[^\s,;).]+"
+    r")"
+)
+# явные опечатки субъектов (до канонических display_name)
+_REGION_SPELLING_FIXES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"Сердловск", re.IGNORECASE), "Свердловск"),
+    (re.compile(r"Свердловский\s+область", re.IGNORECASE), "Свердловская область"),
+    (re.compile(r"Московский\s+область", re.IGNORECASE), "Московская область"),
+    (re.compile(r"Новосибирский\s+область", re.IGNORECASE), "Новосибирская область"),
+    (re.compile(r"Краснодарская\s+край", re.IGNORECASE), "Краснодарский край"),
+)
+_WAREHOUSE_INDUSTRIAL_OBJECT_RE = re.compile(
+    r"(?i)(?:для\s+)?производственн\w*(?:\s+и\s+|\s*/\s*|\s+и\s*/\s*)складск\w*"
+    r"|складск\w*(?:\s+и\s+|\s*/\s*)производственн\w*"
+)
+_TRADE_OBJECT_MARKERS: tuple[str, ...] = (
+    "торгов",
+    "тц",
+    "магазин",
+    "супермаркет",
+    "рынок",
+    "кафе",
+    "ресторан",
+    "столов",
+)
+_WAREHOUSE_OBJECT_MARKERS: tuple[str, ...] = (
+    "склад",
+    "логистич",
+    "производств",
+    "цех",
+    "завод",
+    "фабрик",
+)
 
+
+def _is_trivial_clause(clause: str) -> bool:
+    """Однобуквенные/пустые хвосты вроде «а» — не номер пункта."""
+    cleaned = (clause or "").strip().strip("[]()«»\"'. ")
+    if not cleaned:
+        return True
+    if len(cleaned) <= 1 and cleaned.isalpha():
+        return True
+    return False
+
+
+def _collapse_phrase_loops(text: str, *, min_len: int = 40, min_repeats: int = 3) -> str:
+    """Срезает подряд идущие одинаковые куски текста (зацикливание LLM)."""
+    if not text or len(text) < min_len * min_repeats:
+        return text
+    parts: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        collapsed = False
+        max_len = min(220, (n - i) // min_repeats)
+        for length in range(max_len, min_len - 1, -1):
+            chunk = text[i : i + length]
+            if len(chunk) < min_len:
+                continue
+            repeats = 1
+            j = i + length
+            while j + length <= n and text[j : j + length] == chunk:
+                repeats += 1
+                j += length
+            if repeats >= min_repeats:
+                parts.append(chunk)
+                i = j
+                collapsed = True
+                break
+        if not collapsed:
+            parts.append(text[i])
+            i += 1
+    return "".join(parts)
+
+
+def _fix_region_spellings(text: str) -> str:
+    cleaned = text or ""
+    for pattern, replacement in _REGION_SPELLING_FIXES:
+        cleaned = pattern.sub(replacement, cleaned)
+    return cleaned
+
+
+def _strip_junk_citation_tokens(text: str) -> str:
+    return _JUNK_CITATION_TOKEN_RE.sub("", text or "")
+
+
+def _business_is_trade_like(business_type: str) -> bool:
+    text = (business_type or "").lower()
+    if any(m in text for m in _WAREHOUSE_OBJECT_MARKERS):
+        return False
+    return any(m in text for m in _TRADE_OBJECT_MARKERS)
+
+
+def _text_mismatches_business_type(text: str, business_type: str) -> bool:
+    """True, если норма явно про склады/производство при запросе торгового объекта."""
+    if not _business_is_trade_like(business_type):
+        return False
+    body = text or ""
+    lowered = body.lower()
+    if any(m in lowered for m in _TRADE_OBJECT_MARKERS):
+        return False
+    return bool(_WAREHOUSE_INDUSTRIAL_OBJECT_RE.search(body))
+
+
+def _filter_object_mismatched_items(
+    items: list[RequirementItem],
+    business_type: str,
+) -> list[RequirementItem]:
+    kept: list[RequirementItem] = []
+    for item in items:
+        if _text_mismatches_business_type(item.description, business_type):
+            logger.warning(
+                f"отброшен item с подменой типа объекта: desc={item.description[:80]!r}"
+            )
+            continue
+        kept.append(item)
+    return kept
+
+
+def _filter_object_mismatched_differences(
+    differences: list[DifferenceItem],
+    business_type: str,
+) -> list[DifferenceItem]:
+    kept: list[DifferenceItem] = []
+    for diff in differences:
+        blob = " ".join(
+            [
+                diff.summary or "",
+                diff.region_a_value or "",
+                diff.region_b_value or "",
+            ]
+        )
+        if _text_mismatches_business_type(blob, business_type):
+            logger.warning(
+                f"отброшен diff с подменой типа объекта: summary={diff.summary[:80]!r}"
+            )
+            continue
+        kept.append(diff)
+    return kept
 
 def _punkt_label(citation: str) -> str:
     """Пункт / статья / таблица / приложение для цитаты рядом с требованием.
@@ -957,13 +1123,20 @@ def _punkt_label(citation: str) -> str:
         "—",
     }:
         return ""
+    if _is_trivial_clause(normalized):
+        return ""
     # curated id: «СанПиН/7.1.3», «123-ФЗ/69», «СО-доп/склад»
     if "/" in normalized:
         head, _, tail = normalized.partition("/")
         clause = (tail or "").strip()
         if not clause:
             return "положения"
+        if _is_trivial_clause(clause):
+            return ""
         if clause.lower().startswith(("п.", "п ", "ст.", "ст ", "ч.", "ч ", "табл", "прил")):
+            rest = re.sub(r"^(?:п|ст|ч)\.?\s*", "", clause, flags=re.IGNORECASE).strip()
+            if _is_trivial_clause(rest):
+                return ""
             return clause
         # словесные метки curated («склад», «тц») — не выдаём как «п. склад»
         if _WORD_ONLY_SECTION.fullmatch(clause) and not any(ch.isdigit() for ch in clause):
@@ -975,6 +1148,11 @@ def _punkt_label(citation: str) -> str:
         return f"п. {clause}"
     lowered = normalized.lower()
     if lowered.startswith(("п.", "п ", "ст.", "ст ", "ч.", "ч ", "табл", "прил")):
+        rest = re.sub(r"^(?:п|ст|ч)\.?\s*", "", lowered, flags=re.IGNORECASE).strip()
+        if _is_trivial_clause(rest) and not lowered.startswith("табл") and not lowered.startswith(
+            "прил"
+        ):
+            return ""
         return normalized
     if _WORD_ONLY_SECTION.fullmatch(normalized) and not any(ch.isdigit() for ch in normalized):
         return "положения"
@@ -1200,12 +1378,14 @@ def _render_extraction(extraction: ExtractionResult) -> str:
         )
 
     if not has_regional and not has_federal:
+        lines.append("")
         lines.append(
-            "\nИтого: в доступных источниках требования не найдены ни в "
+            "Итого: в доступных источниках требования не найдены ни в "
             "региональных, ни в федеральных нормативных материалах. Имеет смысл "
             "сверить муниципальные ПЗЗ и отраслевые НПА отдельно."
         )
 
+    lines.append("")
     lines.append(format_additional_checks_block(extraction.business_type))
     return "\n".join(lines)
 
@@ -1221,7 +1401,8 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         f"⚖ {region_b.display_name} — правовое регулирование: {_esc(region_b.document_title)} "
         f"(проверено {region_b.last_verified})",
         f"📜 Федеральные нормы: {_esc(sp_label)}.",
-        f"\n{_esc(comparison.overall_summary)}",
+        "",
+        _esc(comparison.overall_summary),
     ]
 
     commons = [item for item in (comparison.common_requirements or []) if _is_concrete_common(item)]
@@ -1229,14 +1410,16 @@ def _render_comparison(comparison: ComparisonResult) -> str:
 
     # сначала различия, потом совпадения (только конкретные)
     if differences:
-        lines.append("\n<b>Чем отличаются:</b>")
+        lines.append("")
+        lines.append("<b>Чем отличаются:</b>")
         groups = _group_by_category(differences)
         diff_number = 1
         for category in get_settings().requirement_categories:
             category_diffs = groups.get(category) or []
             if not category_diffs:
                 continue
-            lines.append(f"\n<b>{_category_label(category)}</b>")
+            lines.append("")
+            lines.append(f"<b>{_category_label(category)}</b>")
             specific = [diff for diff in category_diffs if diff.is_specific]
             general = [diff for diff in category_diffs if not diff.is_specific]
             if not specific and general:
@@ -1266,10 +1449,13 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                 )
                 diff_number += 1
     else:
-        lines.append("\n<b>Чем отличаются:</b>\nРазличий не обнаружено.")
+        lines.append("")
+        lines.append("<b>Чем отличаются:</b>")
+        lines.append("Различий не обнаружено.")
 
     if commons:
-        lines.append("\n<b>Что совпадает:</b>")
+        lines.append("")
+        lines.append("<b>Что совпадает:</b>")
         lines.append(
             "Следующие требования совпадают либо одинаково опираются на федеральные нормы:"
         )
@@ -1278,12 +1464,14 @@ def _render_comparison(comparison: ComparisonResult) -> str:
             source = _format_item_source(item.citation, item.source_level, source_code)
             lines.append(f"{index}. {_esc(item.description)} {source}")
     elif not differences:
+        lines.append("")
         lines.append(
-            "\nТребования не установлены ни в региональных, ни в федеральных "
+            "Требования не установлены ни в региональных, ни в федеральных "
             "нормативных материалах в объёме доступных источников. Рекомендуем "
             "проверить ПЗЗ и отраслевые НПА напрямую."
         )
 
+    lines.append("")
     lines.append(format_additional_checks_block(comparison.business_type))
     return "\n".join(lines)
 
@@ -1301,8 +1489,12 @@ def _polish_response_text(text: str) -> str:
     cleaned = re.sub(r"\.\s+В\s+", ".\n\nВ ", cleaned)
     cleaned = re.sub(r"\.\s+А\s+в\s+", ".\n\nА в ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\.\s+Общим\s+", ".\n\nОбщим ", cleaned)
-    # убрать гигантские перечни чисел
+    # убрать гигантские перечни чисел и цепочки «1.1.1.1…»
     cleaned = _NUMBER_LIST_ARTIFACT_RE.sub("\n", cleaned)
+    cleaned = _DOTTED_RUNAWAY_RE.sub("", cleaned)
+    cleaned = _collapse_phrase_loops(cleaned)
+    cleaned = _fix_region_spellings(cleaned)
+    cleaned = _strip_junk_citation_tokens(cleaned)
     # артефакты генерации: «### /с/ /с/…», markdown-заголовки вне HTML
     cleaned = _SLASH_S_ARTIFACT_RE.sub("", cleaned)
     cleaned = _MARKDOWN_HEADING_RE.sub("", cleaned)
@@ -1335,6 +1527,7 @@ def _polish_response_text(text: str) -> str:
     cleaned = re.sub(r"\(\s*;\s*\)", "", cleaned)
     cleaned = re.sub(r"\(\s*\)", "", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 

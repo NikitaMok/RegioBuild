@@ -518,6 +518,83 @@ def test_polish_response_strips_slash_s_artifact() -> None:
     assert "Далее текст" in cleaned
 
 
+def test_polish_response_strips_dotted_runaway() -> None:
+    junk = "Установлены целевые " + ".".join(["1"] * 40) + " показатели."
+    cleaned = nodes._polish_response_text(junk)
+    assert "1.1.1.1.1.1.1.1" not in cleaned
+    assert "Установлены целевые" in cleaned
+    assert "показатели" in cleaned
+
+
+def test_polish_response_collapses_phrase_loop_and_region_typo() -> None:
+    phrase = (
+        "Сердловский область (положения Приказа Министерства строительства "
+        "и развития инфраструктуры Свердловской области от 01.08.2023 N 435-П)"
+    )
+    junk = "Начало. " + (phrase * 4) + " Конец."
+    cleaned = nodes._polish_response_text(junk)
+    assert cleaned.count("положения Приказа Министерства") == 1
+    assert "Сердловск" not in cleaned
+    assert "Свердловск" in cleaned
+    assert "Начало" in cleaned
+    assert "Конец" in cleaned
+
+
+def test_polish_response_strips_junk_citation_tokens() -> None:
+    junk = (
+        "Норма действует (п. а / пункт 13.3/6 / пункт МО-доп/склад) "
+        "для объекта."
+    )
+    cleaned = nodes._polish_response_text(junk)
+    assert "п. а" not in cleaned.lower()
+    assert "пункт МО-доп/склад" not in cleaned
+    assert "Норма действует" in cleaned
+
+
+def test_punkt_label_rejects_trivial_clause() -> None:
+    assert nodes._punkt_label("а") == ""
+    assert nodes._punkt_label("п. а") == ""
+    assert nodes._punkt_label("МО-доп/а") == ""
+
+
+def test_filter_object_mismatched_items_for_trade_center() -> None:
+    items = [
+        RequirementItem(
+            category="пожарная_безопасность",
+            description="Для производственных и складских объектов расстояния "
+            "принимаются по таблицам 123-ФЗ.",
+            citation="123-ФЗ/69",
+            source_level="федеральный",
+            is_specific=True,
+        ),
+        RequirementItem(
+            category="градостроительные",
+            description="Инфраструктура для СИМ размещается у торговых центров.",
+            citation="3.1.2",
+            source_level="региональный",
+            is_specific=True,
+        ),
+    ]
+    kept = nodes._filter_object_mismatched_items(items, "торговый центр")
+    assert len(kept) == 1
+    assert "СИМ" in kept[0].description
+
+
+def test_render_comparison_avoids_triple_blank_lines() -> None:
+    comparison = ComparisonResult(
+        region_a="moscow_oblast",
+        region_b="tatarstan",
+        business_type="склад",
+        overall_summary="В Московской области есть нормы. А в Республике Татарстан иные.",
+        common_requirements=[],
+        differences=[],
+    )
+    text = nodes._render_comparison(comparison)
+    assert "\n\n\n" not in text
+    assert "Чем отличаются:" in text
+    assert "Что требуется проверить дополнительно:" in text
+
+
 def test_format_response_aspect_refusal_is_primary_answer() -> None:
     refusal = (
         "По Вашему запросу в доступных источниках сервиса не установлены "

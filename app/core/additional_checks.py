@@ -72,7 +72,7 @@ def additional_checks_for(business_type: str) -> list[str]:
 
 def format_additional_checks_block(business_type: str) -> str:
     checks = additional_checks_for(business_type)
-    lines = ["\n<b>Что требуется проверить дополнительно:</b>"]
+    lines = ["<b>Что требуется проверить дополнительно:</b>"]
     for index, item in enumerate(checks, start=1):
         lines.append(f"{index}. {item}")
     return "\n".join(lines)

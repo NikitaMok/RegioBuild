@@ -117,6 +117,14 @@ junk = _polish_response_text("норма\n### /с/ /с/ /с/ /с/\nконец")
 if "/с/" in junk or "###" in junk:
     errors.append("POLISH: артефакт /с/ не вырезается")
 
+dotted = _polish_response_text("цель " + ".".join(["1"] * 30) + " конец")
+if "1.1.1.1.1.1.1.1" in dotted:
+    errors.append("POLISH: цепочка 1.1.1… не вырезается")
+
+typo = _polish_response_text("Сердловский область — нормы")
+if "Сердловск" in typo or "Свердловск" not in typo:
+    errors.append("POLISH: опечатка Сердловск не исправляется")
+
 if "специальные требования по указанному вопросу не установлены" not in _MISSING_REGION_VALUE.lower():
     errors.append("MISSING: нет юридической фразы об отсутствии требований")
 
