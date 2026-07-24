@@ -49,7 +49,10 @@ def compare_regions(payload: CompareRequest, request: Request) -> AgentResponse:
         agent_state = run_compare_query(payload.business_type, region_a, region_b)
     except Exception as exc:
         logger.exception("агент упал с необработанным исключением")
-        raise HTTPException(status_code=500, detail=f"внутренняя ошибка агента: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Сервис временно не смог обработать запрос. Повторите попытку через минуту.",
+        ) from exc
 
     latency_ms = int((time.perf_counter() - started) * 1000)
     response_text = agent_state.get("response_text", "")

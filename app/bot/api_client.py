@@ -37,11 +37,20 @@ async def _post(path: str, payload: dict) -> dict:
                 except Exception:
                     pass
                 raise ApiRateLimitError(detail)
+            if response.status_code >= 500:
+                raise ApiClientError(
+                    "Сервис временно не смог обработать запрос. "
+                    "Повторите попытку через минуту."
+                )
             response.raise_for_status()
         except ApiRateLimitError:
             raise
-        except httpx.HTTPError as exc:
-            raise ApiClientError(f"backend недоступен или вернул ошибку: {exc}") from exc
+        except ApiClientError:
+            raise
+        except httpx.HTTPError:
+            raise ApiClientError(
+                "Сервис временно недоступен. Повторите попытку через минуту."
+            ) from None
     return response.json()
 
 

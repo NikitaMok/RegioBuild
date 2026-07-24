@@ -31,7 +31,11 @@ class QdrantStore:
         self._qm = qm
         settings = get_settings()
         self.collection = settings.qdrant_collection
-        kwargs: dict[str, Any] = {"url": settings.qdrant_url}
+        kwargs: dict[str, Any] = {
+            "url": settings.qdrant_url,
+            # Cloud из EU иногда «просыпается» дольше дефолтных ~5–10 с
+            "timeout": 60,
+        }
         if settings.qdrant_api_key:
             kwargs["api_key"] = settings.qdrant_api_key
         self._client = QdrantClient(**kwargs)
@@ -43,9 +47,26 @@ class QdrantStore:
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:
+        import time
+
         from qdrant_client.http import models as qm
 
-        names = {c.name for c in self._client.get_collections().collections}
+        names: set[str] | None = None
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                names = {c.name for c in self._client.get_collections().collections}
+                break
+            except Exception as exc:  # noqa: BLE001 — сеть/таймаут Cloud
+                last_exc = exc
+                logger.warning(
+                    f"Qdrant get_collections попытка {attempt + 1}/3: {exc}"
+                )
+                time.sleep(1.5 * (attempt + 1))
+        if names is None:
+            raise RuntimeError(
+                f"не удалось связаться с Qdrant: {last_exc}"
+            ) from last_exc
         if self.collection not in names:
             self._client.create_collection(
                 collection_name=self.collection,
