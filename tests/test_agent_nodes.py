@@ -492,7 +492,7 @@ def test_polish_response_splits_region_paragraphs() -> None:
         "В Новосибирской области детальные региональные нормы для складов не установлены; "
         "обязательны только федеральные требования."
     )
-    assert "\nВ Новосибирской" in text
+    assert "\n\nВ Новосибирской" in text
     assert "; обязательны" not in text
     assert "При этом обязательны" in text or "обязательны только" in text
 

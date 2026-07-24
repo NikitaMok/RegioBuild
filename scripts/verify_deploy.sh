@@ -125,6 +125,17 @@ typo = _polish_response_text("Сердловский область — норм
 if "Сердловск" in typo or "Свердловск" not in typo:
     errors.append("POLISH: опечатка Сердловск не исправляется")
 
+fz = _polish_response_text(
+    "Федеральный закон от 22.07.2008 № 1123-ФЗ "
+    "«Технический регламент о требованиях пожарной безопасности»"
+)
+if "1123-ФЗ" in fz or "123-ФЗ" not in fz:
+    errors.append("POLISH: 1123-ФЗ не канонизируется в 123-ФЗ")
+
+gap = _polish_response_text("1.\n\n\nТекст требования.")
+if "1. Текст" not in gap:
+    errors.append("POLISH: лишние Enter после нумерации не схлопываются")
+
 if "специальные требования по указанному вопросу не установлены" not in _MISSING_REGION_VALUE.lower():
     errors.append("MISSING: нет юридической фразы об отсутствии требований")
 

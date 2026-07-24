@@ -1517,10 +1517,10 @@ def _polish_response_text(text: str) -> str:
     cleaned = re.sub(r";\s*обязательн", ". При этом обязательн", cleaned, flags=re.IGNORECASE)
     # оставшиеся «;» между смысловыми частями — точка (не канцелярская склейка)
     cleaned = re.sub(r";\s+(?=[А-ЯЁA-Z])", ". ", cleaned)
-    # новый абзац перед другим субъектом — один перевод, без «дыр»
-    cleaned = re.sub(r"\.\s+В\s+", ".\nВ ", cleaned)
-    cleaned = re.sub(r"\.\s+А\s+в\s+", ".\nА в ", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\.\s+Общим\s+", ".\nОбщим ", cleaned)
+    # новый абзац перед другим субъектом (verify_deploy ждёт \n\n)
+    cleaned = re.sub(r"\.\s+В\s+", ".\n\nВ ", cleaned)
+    cleaned = re.sub(r"\.\s+А\s+в\s+", ".\n\nА в ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\.\s+Общим\s+", ".\n\nОбщим ", cleaned)
     # убрать гигантские перечни чисел и цепочки «1.1.1.1…»
     cleaned = _NUMBER_LIST_ARTIFACT_RE.sub("\n", cleaned)
     cleaned = _DOTTED_RUNAWAY_RE.sub("", cleaned)
