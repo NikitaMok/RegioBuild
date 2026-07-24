@@ -46,12 +46,13 @@ docker compose -f docker-compose.prod.yml exec api python -m scripts.restore_bac
 ## CI/CD
 
 - `CI` — тесты на каждый push/PR.
-- `Deploy` — по push в `main`, SSH на VPS. Секреты репозитория:  
-  `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, опционально `DEPLOY_USER` (по умолчанию root),  
-  `DEPLOY_PATH` (`/opt/regiobuild`), `DEPLOY_PORT`.
+- `Deploy` — по push в `main`, SSH на VPS. **Обязательные** секреты репозитория:  
+  `DEPLOY_HOST`, `DEPLOY_SSH_KEY` (без них Deploy = **failure**, а не «пустой успех»).  
+  Опционально: `DEPLOY_USER` (по умолчанию root), `DEPLOY_PATH` (`/opt/regiobuild`), `DEPLOY_PORT`.
 - После `up -d` обязательно `scripts/verify_deploy.sh`: SHA на сервере =
   `github.sha`, `/health` ok, в **running** контейнере API есть актуальные
   пользовательские формулировки, сервис `bot` запущен. Иначе Deploy = failure.
+- Ручная выкладка на сервере: `bash scripts/deploy_remote.sh` (тоже с verify).
 
 ## Отказоустойчивость на одном узле
 
