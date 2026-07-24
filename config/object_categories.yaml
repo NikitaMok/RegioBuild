@@ -17,7 +17,7 @@ objects:
   склад: [sanitary, fire, parking, setback, evacuation]
   складской комплекс: [sanitary, fire, parking, evacuation]
   торговый центр: [parking, fire, accessibility, sanitary, evacuation]
-  тц: [parking, fire, accessibility, evacuation]
+  тц: [parking, fire, accessibility, sanitary, evacuation]
   магазин: [parking, fire, accessibility, sanitary]
   офис: [parking, height, setback, fire, accessibility, networks, evacuation]
   офисное здание: [parking, height, setback, fire, accessibility, networks, evacuation]
@@ -27,7 +27,11 @@ objects:
   гостиница: [parking, fire, sanitary, accessibility, evacuation]
   отель: [parking, fire, sanitary, evacuation]
   медицинский центр: [parking, sanitary, fire, accessibility, evacuation]
-  медцентр: [parking, sanitary, fire]
+  медцентр: [parking, sanitary, fire, accessibility]
+  поликлиника: [parking, sanitary, fire, accessibility]
+  спортивный комплекс: [parking, fire, sanitary, accessibility, evacuation]
+  спортзал: [parking, fire, sanitary, accessibility]
+  стадион: [parking, fire, sanitary, accessibility, evacuation]
   производство: [fire, sanitary, setback, parking, networks, docs]
   цех: [fire, sanitary, setback, parking]
   завод: [fire, sanitary, setback, parking]
@@ -64,9 +68,12 @@ object_query_extras:
     - "эвакуация людей из зданий торгового назначения"
     - "парковка машино-места торговые центры"
     - "пешеходная доступность торговых центров"
+    - "санитарно-защитная зона СанПиН торговые объекты"
+    - "санитарные разрывы объекты торговли"
   тц:
     - "эвакуация людей из зданий торгового назначения"
     - "парковка машино-места торговые центры"
+    - "санитарно-защитная зона СанПиН торговые объекты"
   офис:
     - "эвакуация из административных и офисных зданий"
     - "требования пожарной безопасности к объектам защиты"
@@ -86,3 +93,23 @@ object_query_extras:
     - "эвакуация из зданий гостиниц"
   медицинский центр:
     - "размещение лечебно-профилактических учреждений"
+    - "санитарно-защитная зона СанПиН лечебные учреждения"
+    - "парковка поликлиника больница машино-места"
+    - "пешеходная доступность объекты здравоохранения"
+  медцентр:
+    - "размещение лечебно-профилактических учреждений"
+    - "санитарно-защитная зона СанПиН лечебные учреждения"
+  поликлиника:
+    - "размещение лечебно-профилактических учреждений"
+    - "санитарно-защитная зона СанПиН лечебные учреждения"
+  спортивный комплекс:
+    - "спортивные сооружения нормы обеспеченности СП 42"
+    - "пожарная безопасность здания массового пребывания"
+    - "санитарно-защитная зона спортивные сооружения"
+    - "парковка спортивный комплекс машино-места"
+  спортзал:
+    - "спортивные сооружения нормы обеспеченности"
+    - "пожарная безопасность здания массового пребывания"
+  стадион:
+    - "спортивные сооружения нормы обеспеченности"
+    - "пожарная безопасность здания массового пребывания"

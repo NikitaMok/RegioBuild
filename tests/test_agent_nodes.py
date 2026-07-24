@@ -847,6 +847,34 @@ def test_polish_removes_remaining_semicolons() -> None:
     assert "50 м. Мойки от 2 до 5" in cleaned
 
 
+def test_polish_fixes_decimal_spacing_and_nested_cite_parens() -> None:
+    cleaned = nodes._polish_response_text(
+        "дальность не более 0, 25 км (п. 7.1.3 (СанПиН 2.2.1/2.1.1.1200-03 «СЗЗ»))"
+    )
+    assert "0, 25" not in cleaned
+    assert "0,25" in cleaned
+    assert "(п. 7.1.3 (СанПиН" not in cleaned
+    assert "(п. 7.1.3 СанПиН" in cleaned
+
+
+def test_polish_fixes_broken_soglasno_phrase() -> None:
+    cleaned = nodes._polish_response_text(
+        "показатели обеспеченности согласно без детализации численных значений "
+        "в представленных выдержках."
+    )
+    assert "согласно без" not in cleaned.lower()
+    assert "без детализации" in cleaned
+    assert "представленных выдержках" not in cleaned.lower()
+
+
+def test_format_item_source_no_nested_parens() -> None:
+    cite = nodes._format_item_source("СанПиН/7.1.3", "федеральный", "RU-FED")
+    assert cite.startswith("(п. 7.1.3 ")
+    assert "(п. 7.1.3 (СанПиН" not in cite
+    assert cite.count("(") == 1
+    assert cite.count(")") == 1
+
+
 def test_render_comparison_has_single_blank_between_blocks() -> None:
     comparison = ComparisonResult(
         region_a="moscow_oblast",

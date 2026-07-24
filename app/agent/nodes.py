@@ -281,7 +281,7 @@ def rerank_retrieved(state: AgentState) -> AgentState:
         chunks = list(state.get(key) or [])
         if chunks:
             # держим больше осей (парковка / СЗЗ / пожар), не схлопываем в 3
-            new_state[key] = rerank_chunks(query, chunks, top_n=min(8, len(chunks)))
+            new_state[key] = rerank_chunks(query, chunks, top_n=min(12, len(chunks)))
     return new_state
 
 
@@ -319,9 +319,12 @@ _BUSINESS_MENTION_STEMS: dict[str, tuple[str, ...]] = {
     "ресторан": ("ресторан", "кафе", "питан"),
     "гостиница": ("гостиниц", "отел", "размещен"),
     "отель": ("гостиниц", "отел", "размещен"),
-    "медицинский центр": ("медицин", "поликлиник", "больниц", "лпу"),
-    "медцентр": ("медицин", "поликлиник", "больниц"),
-    "поликлиника": ("поликлиник", "медицин", "больниц"),
+    "медицинский центр": ("медицин", "поликлиник", "больниц", "лпу", "лечебн"),
+    "медцентр": ("медицин", "поликлиник", "больниц", "лечебн"),
+    "поликлиника": ("поликлиник", "медицин", "больниц", "лечебн"),
+    "спортивный комплекс": ("спорт", "физкультур", "стадион", "бассейн"),
+    "спортзал": ("спорт", "физкультур"),
+    "стадион": ("стадион", "спорт"),
     "офис": ("офис", "административ"),
     "офисное здание": ("офис", "административ"),
     "административное здание": ("офис", "административ"),
@@ -348,6 +351,10 @@ _RETRIEVAL_CANON: dict[str, str] = {
     "поликлиника": "медицинский центр",
     "больница": "медицинский центр",
     "аптека": "медицинский центр",
+    "спортзал": "спортивный комплекс",
+    "стадион": "спортивный комплекс",
+    "физкультурно-оздоровительный комплекс": "спортивный комплекс",
+    "фок": "спортивный комплекс",
     "цех": "производство",
     "завод": "производство",
     "фабрика": "производство",
@@ -516,8 +523,33 @@ def _retrieve_for_region(
         if _is_curated_chunk(c) and _type_affinity(c, resolved) >= 5
     ]
     if curated_hit:
-        reserve = min(3, max_chunks, len(curated_hit))
-        head = curated_hit[:reserve]
+        # разнообразие осей: не только 123-ФЗ, но и СанПиН / СП при наличии
+        diversified: list[RetrievedChunk] = []
+        seen_families: set[str] = set()
+        for chunk in curated_hit:
+            sec = _normalize_section_key(chunk.section_number)
+            if sec.startswith("санпин"):
+                family = "sanpin"
+            elif "123" in sec or "фз" in sec:
+                family = "fz123"
+            elif sec.startswith("сп") or "сп 42" in (chunk.text or "").lower()[:80]:
+                family = "sp"
+            else:
+                family = sec.split("/")[0] if "/" in sec else sec[:12]
+            if family in seen_families and len(diversified) >= 2:
+                continue
+            seen_families.add(family)
+            diversified.append(chunk)
+            if len(diversified) >= 4:
+                break
+        # дополняем остальными curated по качеству секции
+        for chunk in curated_hit:
+            if chunk.id in {c.id for c in diversified}:
+                continue
+            diversified.append(chunk)
+            if len(diversified) >= min(5, max_chunks):
+                break
+        head = diversified[: min(5, max_chunks, len(diversified))]
         head_ids = {c.id for c in head}
         tail = [c for c in chunks if c.id not in head_ids]
         chunks = head + tail
@@ -1379,7 +1411,7 @@ def _punkt_label(citation: str) -> str:
 
 def _npa_after_clause(npa_title: str) -> str:
     """Название НПА после «п./ст.» — родительный для типовых актов."""
-    title = (npa_title or "").strip()
+    title = (npa_title or "").strip().strip("()[]")
     for nominative, genitive in (
         ("Постановление ", "Постановления "),
         ("Приказ ", "Приказа "),
@@ -1388,6 +1420,19 @@ def _npa_after_clause(npa_title: str) -> str:
         if title.startswith(nominative):
             return genitive + title[len(nominative) :]
     return title
+
+
+_TRAILING_INLINE_CITE_RE = re.compile(
+    r"\s*\(\s*(?:п(?:ункт)?\.?|ст\.?|табл\.?|прил\.?)[^)]{0,220}\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_trailing_inline_cite(text: str) -> str:
+    """Убрать хвостовую цитату из description LLM — её добавит _format_item_source."""
+    cleaned = (text or "").strip()
+    cleaned = _TRAILING_INLINE_CITE_RE.sub("", cleaned).strip()
+    return cleaned
 
 
 def _full_npa_for_item(citation: str, source_level: str, region_code: str) -> str:
@@ -1406,6 +1451,8 @@ def _format_item_source(citation: str, source_level: str, region_code: str) -> s
     if not punkt or punkt == "положения":
         return ""
     npa = _npa_after_clause(_full_npa_for_item(citation, source_level, region_code))
+    # без вложенных скобок: «(п. 7.1.3 (СанПиН …))»
+    npa = npa.lstrip("(").rstrip(")")
     return f"({_esc(punkt)} {_esc(npa)})"
 
 
@@ -1491,19 +1538,22 @@ def _render_item_bullets(items: list[RequirementItem], region_code: str) -> list
     if specific_items and general_items:
         for item in specific_items:
             source = _format_item_source(item.citation, item.source_level, region_code)
-            lines.append(f"• {_esc(item.description)} {source}")
+            desc = _strip_trailing_inline_cite(item.description)
+            lines.append(f"• {_esc(desc)} {source}".rstrip())
         lines.append(
             "\n<b>Общие положения:</b>"
         )
         for item in general_items:
             source = _format_item_source(item.citation, item.source_level, region_code)
-            lines.append(f"• {_esc(item.description)} {source}")
+            desc = _strip_trailing_inline_cite(item.description)
+            lines.append(f"• {_esc(desc)} {source}".rstrip())
         return lines
 
     ordered = specific_items + general_items if specific_items else general_items
     for item in ordered:
         source = _format_item_source(item.citation, item.source_level, region_code)
-        lines.append(f"• {_esc(item.description)} {source}")
+        desc = _strip_trailing_inline_cite(item.description)
+        lines.append(f"• {_esc(desc)} {source}".rstrip())
     return lines
 
 
@@ -1840,6 +1890,48 @@ def _split_region_paragraphs_safe(text: str) -> str:
     return "\n".join(parts)
 
 
+def _normalize_decimal_spacing(text: str) -> str:
+    """«0, 25 км» → «0,25 км» (пробел после запятой в десятичной дроби)."""
+    return re.sub(r"(\d),\s+(\d)", r"\1,\2", text or "")
+
+
+def _fix_nested_citation_parens(text: str) -> str:
+    """«(п. 7.1.3 (СанПиН …))» → «(п. 7.1.3 СанПиН …)»."""
+    cleaned = text or ""
+    cleaned = re.sub(
+        r"\(\s*((?:п\.|ст\.)\s*[\d.]+)\s*\(\s*",
+        r"(\1 ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\)\s*\)+", ")", cleaned)
+    return cleaned
+
+
+def _fix_broken_llm_phrases(text: str) -> str:
+    """Обрывки вроде «согласно без детализации…»."""
+    cleaned = text or ""
+    cleaned = re.sub(
+        r"согласно\s+без\s+детализац",
+        "без детализац",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"в\s+представленных\s+выдержках",
+        "в доступных источниках",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"в\s+представленной\s+части\s+акта",
+        "в доступной части акта",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned
+
+
 def _polish_response_text(text: str) -> str:
     """Связные переходы между регионами и отсечение артефактов (списки чисел, /с/)."""
     cleaned = text or ""
@@ -1847,6 +1939,9 @@ def _polish_response_text(text: str) -> str:
     cleaned = _dedupe_additional_checks_blocks(cleaned)
     cleaned = _replace_semicolons(cleaned)
     cleaned = _split_region_paragraphs_safe(cleaned)
+    cleaned = _normalize_decimal_spacing(cleaned)
+    cleaned = _fix_nested_citation_parens(cleaned)
+    cleaned = _fix_broken_llm_phrases(cleaned)
     # убрать гигантские перечни чисел и цепочки «1.1.1.1…»
     cleaned = _NUMBER_LIST_ARTIFACT_RE.sub("\n", cleaned)
     cleaned = _DOTTED_RUNAWAY_RE.sub("", cleaned)
