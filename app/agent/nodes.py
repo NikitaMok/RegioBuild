@@ -29,7 +29,7 @@ from app.core.query_aspects import (
     detect_aspects,
     refusal_for_unsupported_aspects,
 )
-from app.core.regions import FEDERAL_CODE, get_region
+from app.core.regions import FEDERAL_CODE, REGIONS, get_region, resolve_region_code
 from app.llm.base import DEFAULT_MAX_TOKENS, LLMProviderError
 from app.llm.factory import get_llm_provider
 from app.llm.errors import friendly_llm_failure
@@ -1007,12 +1007,18 @@ def _ground_optional_citation(
         return ""
     scoped = chunks
     if side_region:
+        side_canon = _resolve_keep_region_code(side_region) or side_region
         scoped = [
             c
             for c in chunks
-            if (c.region_code or "") in {side_region, FEDERAL_CODE, "RU-FED"}
-            or _citation_looks_federal(raw)
-        ] or chunks
+            if _citation_looks_federal(raw)
+            or (c.region_code or "") in {FEDERAL_CODE, "RU-FED"}
+            or _region_codes_match(c.region_code, side_canon)
+        ]
+        # без фолбэка на чужие чанки — иначе НПА региона A попадает в сторону B
+        if not scoped:
+            logger.warning(f"отброшена citation без чанков стороны {side_canon}: {raw!r}")
+            return ""
     if _citation_matches_chunks(raw, scoped):
         return raw
     logger.warning(f"отброшена citation без опоры на чанки: {raw!r}")
@@ -1066,6 +1072,16 @@ _FIRE_FZ_CONTEXT_RE = re.compile(
 )
 # «1.» + куча Enter → «1. » (типичный рваный compare)
 _NUMBERED_GAP_RE = re.compile(r"(?m)(^|\n)(\d{1,2})\.\s*\n+")
+# заголовок доп. проверок (LLM иногда зацикливает блок)
+_ADDITIONAL_CHECKS_BLOCK_RE = re.compile(
+    r"(?is)(?:^|\n)[ \t]*(?:<b>)?Что требуется проверить дополнительно:?[ \t]*(?:</b>)?"
+    r"(?:\n[ \t]*\d+\.\s*[^\n]+)+",
+)
+# сырые curated id в прозе: «п. СанПиН/7.1.3», «123-ФЗ/69»
+_CURATED_CITATION_IN_PROSE_RE = re.compile(
+    r"(?i)(?:\b(?:п(?:ункт)?|ст|статья)\.?\s*)?"
+    r"(?P<head>СанПиН|123\s*-?\s*ФЗ|СП\s*42(?:\.\d+)*)\s*/\s*(?P<tail>[\w.\-]+)"
+)
 # явные опечатки субъектов (до канонических display_name)
 _REGION_SPELLING_FIXES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"Сердловск", re.IGNORECASE), "Свердловск"),
@@ -1145,39 +1161,105 @@ def _fix_region_spellings(text: str) -> str:
     return cleaned
 
 
+_NPA_DOC_NUM_RE = re.compile(r"(?i)\bN\s*([\w\-/\.]+)")
+
+
+def _resolve_keep_region_code(keep_region: str | None) -> str | None:
+    if not keep_region:
+        return None
+    try:
+        return resolve_region_code(keep_region)
+    except ValueError:
+        return keep_region
+
+
+def _region_codes_match(left: str | None, right: str | None) -> bool:
+    if not left or not right:
+        return False
+    try:
+        return resolve_region_code(left) == resolve_region_code(right)
+    except ValueError:
+        return left == right
+
+
 def _strip_foreign_region_npa(text: str, *, keep_region: str | None) -> str:
     """Убирает реквизиты чужих региональных НПА из текста стороны сравнения."""
-    from app.core.regions import REGIONS
+    from app.core.npa_titles import short_npa_cite
 
     cleaned = text or ""
+    keep_code = _resolve_keep_region_code(keep_region)
     keep_title = ""
-    if keep_region and keep_region in REGIONS:
-        keep_title = REGIONS[keep_region].document_title
+    if keep_code and keep_code in REGIONS:
+        keep_title = REGIONS[keep_code].document_title
+
     for code, region in REGIONS.items():
-        if keep_region and code == keep_region:
+        if keep_code and code == keep_code:
             continue
         title = region.document_title
         if not title or (keep_title and title == keep_title):
             continue
-        # полное название и укороченные «Постановление … Новосибирской области»
+        # полное название
         if title in cleaned:
             cleaned = cleaned.replace(title, "")
-        # типичная путаница: «п. 2 Постановления … Новосибирской …» в блоке СО
+        short = short_npa_cite(title)
+        if short and short in cleaned:
+            cleaned = cleaned.replace(short, "")
         loc = region.name_locative
+        # даты с точками (12.08.2015) — не режем класс по «.»
         cleaned = re.sub(
             rf"(?i)(?:п(?:ункт)?\.?\s*)?\d+(?:\.\d+)*\s+"
-            rf"(?:Постановлени\w+|Приказ\w+)\s+[^.«»]{{0,80}}{re.escape(loc)}[^.«»]{{0,120}}",
+            rf"(?:Постановлени\w+|Приказ\w+)\s+[^«»]{{0,160}}?{re.escape(loc)}"
+            rf"[^«»]{{0,200}}?(?=(?:[«»\"]|\(|\)|:|;|$))",
             "",
             cleaned,
         )
         cleaned = re.sub(
-            rf"(?i)(?:Постановлени\w+|Приказ\w+)\s+[^.«»]{{0,80}}{re.escape(loc)}[^.«»]{{0,80}}",
+            rf"(?i)(?:Постановлени\w+|Приказ\w+)\s+[^«»]{{0,160}}?{re.escape(loc)}"
+            rf"[^«»]{{0,160}}?(?=(?:[«»\"]|\(|\)|:|;|$))",
             "",
             cleaned,
         )
+        # короткий хвост «N 303-п» / «№ 303-п» чужого акта
+        num_match = _NPA_DOC_NUM_RE.search(title)
+        if num_match:
+            num = num_match.group(1)
+            cleaned = re.sub(
+                rf"(?i)(?:п(?:ункт)?\.?\s*)?\d+(?:\.\d+)*\s+"
+                rf"(?:Постановлени\w+|Приказ\w+)[^«»]{{0,120}}?"
+                rf"(?:N|№)\s*{re.escape(num)}\b",
+                "",
+                cleaned,
+            )
+            cleaned = re.sub(
+                rf"(?i)(?:Постановлени\w+|Приказ\w+)[^«»]{{0,100}}?"
+                rf"(?:N|№)\s*{re.escape(num)}\b",
+                "",
+                cleaned,
+            )
+            cleaned = re.sub(
+                rf"(?i)(?:от\s*)?(?:\d{{1,2}}\.\d{{1,2}}\.\d{{2,4}}\s*)?(?:N|№)\s*{re.escape(num)}\b",
+                "",
+                cleaned,
+            )
+        # оставшееся упоминание чужого субъекта в родительном (без своего keep)
+        if keep_code:
+            cleaned = re.sub(
+                rf"(?i)\b{re.escape(loc)}\b",
+                "",
+                cleaned,
+            )
+            cleaned = re.sub(
+                rf"(?i)\b{re.escape(region.display_name)}\b",
+                "",
+                cleaned,
+            )
+
+    cleaned = re.sub(r"(?i)\bот\s*\.?\d{0,2}\.?\d{0,2}\.?\d{0,4}\b", "", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
-    cleaned = re.sub(r"\(\s*\)", "", cleaned)
-    return cleaned.strip()
+    cleaned = re.sub(r"\(\s*[\s,.;:–—-]*\)", "", cleaned)
+    cleaned = re.sub(r"[ \t]*([,:;])[ \t]*", r"\1 ", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip(" \t,;:–—-")
 
 
 def _strip_junk_citation_tokens(text: str) -> str:
@@ -1346,12 +1428,16 @@ def _format_compare_side(
     side_emoji: str,
 ) -> str:
     region = get_region(region_code)
-    humanized = _compact_inline_newlines(_humanize_missing_value(value))
+    humanized = _compact_inline_newlines(
+        _humanize_missing_value(
+            _strip_foreign_region_npa(value, keep_region=region_code)
+        )
+    )
     # при отсутствии нормы — юридическая фраза без ссылки на НПА (акт уже в шапке)
-    if _is_absent_requirement_value(value):
+    if _is_absent_requirement_value(value) or _is_absent_requirement_value(humanized):
         return (
             f"  {side_emoji} <b>{_esc(region.display_name)}</b>: "
-            f"{_esc(humanized)}"
+            f"{_esc(humanized if humanized else _MISSING_REGION_VALUE)}"
         )
     level = _effective_source_level(citation, source_level)
     if level == "федеральный":
@@ -1492,6 +1578,10 @@ def _render_extraction(extraction: ExtractionResult) -> str:
         )
     else:
         lines.append(_MISSING_REGION_VALUE)
+        lines.append(
+            "Рекомендуем сверить правила землепользования и застройки (ПЗЗ) "
+            "муниципального образования по месту размещения объекта."
+        )
 
     lines.append("")
     lines.append("📜 <b>Федеральные требования</b>")
@@ -1510,8 +1600,7 @@ def _render_extraction(extraction: ExtractionResult) -> str:
         lines.append("")
         lines.append(
             "Итого: в доступных источниках требования не найдены ни в "
-            "региональных, ни в федеральных нормативных материалах. Имеет смысл "
-            "сверить муниципальные ПЗЗ и отраслевые НПА отдельно."
+            "региональных, ни в федеральных нормативных материалах."
         )
 
     lines.append("")
@@ -1530,7 +1619,9 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         f"⚖ {region_b.display_name} — правовое регулирование: {_esc(region_b.document_title)} "
         f"(проверено {region_b.last_verified})",
         f"📜 Федеральные нормы: {_esc(sp_label)}.",
+        "",
         _esc(_compact_inline_newlines(comparison.overall_summary)),
+        "",
     ]
 
     commons = [item for item in (comparison.common_requirements or []) if _is_concrete_common(item)]
@@ -1539,6 +1630,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
     # сначала различия, потом совпадения (только конкретные)
     if differences:
         lines.append("<b>Чем отличаются:</b>")
+        lines.append("")
         groups = _group_by_category(differences)
         diff_number = 1
         for category in get_settings().requirement_categories:
@@ -1575,12 +1667,16 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                     )
                 )
                 diff_number += 1
+            lines.append("")
     else:
         lines.append("<b>Чем отличаются:</b>")
+        lines.append("")
         lines.append("Различий не обнаружено.")
+        lines.append("")
 
     if commons:
         lines.append("<b>Что совпадает:</b>")
+        lines.append("")
         lines.append(
             "Следующие требования совпадают либо одинаково опираются на федеральные нормы:"
         )
@@ -1590,14 +1686,19 @@ def _render_comparison(comparison: ComparisonResult) -> str:
             source = _format_item_source(item.citation, level, source_code)
             desc = _compact_inline_newlines(item.description)
             lines.append(f"{index}. {_esc(desc)} {source}".rstrip())
+        lines.append("")
     elif not differences:
         lines.append(
             "Требования не установлены ни в региональных, ни в федеральных "
             "нормативных материалах в объёме доступных источников. Рекомендуем "
             "проверить ПЗЗ и отраслевые НПА напрямую."
         )
+        lines.append("")
 
     lines.append(format_additional_checks_block(comparison.business_type))
+    # убрать хвостовые пустые, сохранив одиночные Enter между блоками
+    while lines and lines[-1] == "":
+        lines.pop()
     return "\n".join(line for line in lines if line is not None)
 
 
@@ -1627,6 +1728,41 @@ def _sanitize_foreign_fz_refs(text: str) -> str:
     return _FOREIGN_FZ_RE.sub(_replace, source)
 
 
+def _dedupe_additional_checks_blocks(text: str) -> str:
+    """Оставляет один блок «Что требуется проверить дополнительно» (последний)."""
+    source = text or ""
+    matches = list(_ADDITIONAL_CHECKS_BLOCK_RE.finditer(source))
+    if len(matches) <= 1:
+        return source
+    parts: list[str] = []
+    cursor = 0
+    for match in matches[:-1]:
+        parts.append(source[cursor : match.start()])
+        cursor = match.end()
+    parts.append(source[cursor:])
+    cleaned = "".join(parts)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned
+
+
+def _humanize_curated_citation_tokens(text: str) -> str:
+    """«п. СанПиН/7.1.3» → «п. 7.1.3»; «123-ФЗ/69» → «ст. 69»."""
+
+    def _replace(match: re.Match[str]) -> str:
+        head = re.sub(r"\s+", "", match.group("head") or "")
+        tail = (match.group("tail") or "").strip()
+        if not tail or _is_trivial_clause(tail):
+            return ""
+        head_l = head.lower()
+        if "фз" in head_l or "123" in head_l:
+            return f"ст. {tail}"
+        if tail.lower().startswith(("п.", "п ", "ст.", "ст ", "ч.", "табл", "прил")):
+            return tail
+        return f"п. {tail}"
+
+    return _CURATED_CITATION_IN_PROSE_RE.sub(_replace, text or "")
+
+
 def _polish_response_text(text: str) -> str:
     """Связные переходы между регионами и отсечение артефактов (списки чисел, /с/)."""
     cleaned = text or ""
@@ -1644,6 +1780,8 @@ def _polish_response_text(text: str) -> str:
     cleaned = _NUMBER_LIST_ARTIFACT_RE.sub("\n", cleaned)
     cleaned = _DOTTED_RUNAWAY_RE.sub("", cleaned)
     cleaned = _collapse_phrase_loops(cleaned)
+    cleaned = _dedupe_additional_checks_blocks(cleaned)
+    cleaned = _humanize_curated_citation_tokens(cleaned)
     cleaned = _fix_region_spellings(cleaned)
     cleaned = _strip_junk_citation_tokens(cleaned)
     cleaned = _sanitize_foreign_fz_refs(cleaned)

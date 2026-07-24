@@ -46,8 +46,19 @@ docker compose -f "$COMPOSE_FILE" --env-file .env exec -T api python - <<'PY'
 from app.core.legal import DISCLAIMER_TEXT, LEGAL_BOUNDARIES_HTML
 from app.bot.handlers.common import WELCOME_TEXT, RULES_TEXT
 from app.bot.profile import BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION
-from app.agent.nodes import _render_extraction, _polish_response_text, _MISSING_REGION_VALUE
-from app.llm.schemas import ExtractionResult, RequirementItem
+from app.agent.nodes import (
+    _render_extraction,
+    _render_comparison,
+    _polish_response_text,
+    _strip_foreign_region_npa,
+    _MISSING_REGION_VALUE,
+)
+from app.llm.schemas import (
+    ExtractionResult,
+    RequirementItem,
+    ComparisonResult,
+    DifferenceItem,
+)
 
 errors = []
 
@@ -135,6 +146,50 @@ if "1123-ФЗ" in fz or "123-ФЗ" not in fz:
 gap = _polish_response_text("1.\n\n\nТекст требования.")
 if "1. Текст" not in gap:
     errors.append("POLISH: лишние Enter после нумерации не схлопываются")
+
+curated = _polish_response_text("Норма (п. СанПиН/7.1.3) для объекта.")
+if "СанПиН/7.1.3" in curated or "п. 7.1.3" not in curated:
+    errors.append("POLISH: curated СанПиН/… не приводится к «п. 7.1.3»")
+
+block = (
+    "<b>Что требуется проверить дополнительно:</b>\n"
+    "1. первую проверку\n"
+    "2. вторую проверку"
+)
+dup = _polish_response_text(f"Текст.\n{block}\n{block}\n{block}")
+if dup.count("Что требуется проверить дополнительно:") != 1:
+    errors.append("POLISH: блок доп. проверок не схлопывается до одного")
+
+foreign = _strip_foreign_region_npa(
+    "Свердловская область (п. 2 Постановления Правительства Новосибирской области "
+    "от 12.08.2015 N 303-п): сети учитываются.",
+    keep_region="sverdlovsk_oblast",
+)
+if "Новосибирской" in foreign or "303-п" in foreign:
+    errors.append("STRIP: чужой НПА НСО не убран из стороны СО")
+
+cmp_text = _render_comparison(
+    ComparisonResult(
+        region_a="moscow_oblast",
+        region_b="krasnodar_krai",
+        business_type="склад",
+        overall_summary="Есть отличия.",
+        differences=[
+            DifferenceItem(
+                category="градостроительные",
+                region_a_value="10",
+                region_b_value="12",
+                summary="Парковка",
+                citation_a="1.1",
+                citation_b="1.2",
+            )
+        ],
+    )
+)
+if "Чем отличаются:</b>\n\n<b>Градостроительные нормы:</b>" not in cmp_text:
+    errors.append("RENDER: нет Enter между «Чем отличаются» и категорией")
+if "\n\n\n" in cmp_text:
+    errors.append("RENDER: тройные пустые строки в сравнении")
 
 if "специальные требования по указанному вопросу не установлены" not in _MISSING_REGION_VALUE.lower():
     errors.append("MISSING: нет юридической фразы об отсутствии требований")

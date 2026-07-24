@@ -754,9 +754,88 @@ def test_strip_foreign_region_npa_removes_other_subject_title() -> None:
         "Свердловская область (п. 2 Постановления Правительства Новосибирской области "
         "от 12.08.2015 N 303-п): сети учитываются."
     )
-    cleaned = nodes._strip_foreign_region_npa(text, keep_region="RU-SVE")
-    assert "Новосибирской" not in cleaned
-    assert "сети учитываются" in cleaned or "Свердловская" in cleaned
+    for keep in ("RU-SVE", "sverdlovsk_oblast"):
+        cleaned = nodes._strip_foreign_region_npa(text, keep_region=keep)
+        assert "Новосибирской" not in cleaned
+        assert "303-п" not in cleaned
+        assert "303" not in cleaned
+        assert "сети учитываются" in cleaned
+        assert "Свердловская" in cleaned
+
+
+def test_strip_foreign_region_npa_short_number_form() -> None:
+    cleaned = nodes._strip_foreign_region_npa(
+        "по п. 2 Постановления N 303-п сети учитываются",
+        keep_region="RU-SVE",
+    )
+    assert "303-п" not in cleaned
+    assert "сети учитываются" in cleaned
+
+
+def test_polish_dedupes_additional_checks_block() -> None:
+    block = (
+        "<b>Что требуется проверить дополнительно:</b>\n"
+        "1. категорию по пожарной опасности и требования 123-ФЗ\n"
+        "2. санитарно-защитную зону (СанПиН) относительно жилой застройки\n"
+        "3. условия подключения к инженерным сетям у ресурсоснабжающих организаций\n"
+        "4. конструкции/сейсмику/климат (СП) — вне объёма сервиса RegioBuild, "
+        "сверяйте отдельно"
+    )
+    junk = f"Различия по складам.\n{block}\n{block}\n{block}"
+    cleaned = nodes._polish_response_text(junk)
+    assert cleaned.count("Что требуется проверить дополнительно:") == 1
+    assert cleaned.count("категорию по пожарной опасности") == 1
+
+
+def test_polish_humanizes_curated_sanpin_token() -> None:
+    cleaned = nodes._polish_response_text("Норма действует (п. СанПиН/7.1.3) для объекта.")
+    assert "СанПиН/7.1.3" not in cleaned
+    assert "п. 7.1.3" in cleaned
+
+
+def test_render_comparison_has_single_blank_between_blocks() -> None:
+    comparison = ComparisonResult(
+        region_a="moscow_oblast",
+        region_b="krasnodar_krai",
+        business_type="склад",
+        overall_summary="Есть отличия по срокам.",
+        differences=[
+            DifferenceItem(
+                category="градостроительные",
+                region_a_value="10 мест",
+                region_b_value="12 мест",
+                summary="Парковка отличается",
+                citation_a="3.2",
+                citation_b="4.1",
+            )
+        ],
+        common_requirements=[],
+    )
+    text = nodes._render_comparison(comparison)
+    assert "\n\n\n" not in text
+    assert "Чем отличаются:</b>\n\n<b>Градостроительные нормы:</b>" in text
+    assert "Что требуется проверить дополнительно:" in text
+    # один отступ перед блоком доп. проверок
+    assert text.count("Что требуется проверить дополнительно:") == 1
+
+
+def test_render_extraction_empty_regional_recommends_pzz() -> None:
+    extraction = ExtractionResult(
+        region_code="sverdlovsk_oblast",
+        business_type="торговый центр",
+        items=[
+            RequirementItem(
+                category="пожарная_безопасность",
+                description="Противопожарные расстояния по общим правилам.",
+                citation="123-ФЗ/69",
+                source_level="федеральный",
+            )
+        ],
+    )
+    text = nodes._render_extraction(extraction)
+    assert "специальные требования по указанному вопросу не установлены" in text.lower()
+    assert "ПЗЗ" in text
+    assert "Федеральные требования" in text
 
 
 def test_effective_source_level_from_federal_citation() -> None:
