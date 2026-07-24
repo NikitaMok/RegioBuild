@@ -492,7 +492,7 @@ def test_polish_response_splits_region_paragraphs() -> None:
         "В Новосибирской области детальные региональные нормы для складов не установлены; "
         "обязательны только федеральные требования."
     )
-    assert "\n\nВ Новосибирской" in text
+    assert "\nВ Новосибирской" in text
     assert "; обязательны" not in text
     assert "При этом обязательны" in text or "обязательны только" in text
 
@@ -706,9 +706,39 @@ def test_polish_response_strips_wrong_fz_outside_fire_context() -> None:
 
 
 def test_polish_response_keeps_correct_123_fz() -> None:
-    text = "Эвакуационные пути — по ст. 88 123-ФЗ."
+    text = (
+        "Федеральный закон от 22.07.2008 № 123-ФЗ "
+        "«Технический регламент о требованиях пожарной безопасности»"
+    )
     cleaned = nodes._polish_response_text(text)
     assert "123-ФЗ" in cleaned
+    assert "1123-ФЗ" not in cleaned
+    assert "11123-ФЗ" not in cleaned
+
+
+def test_polish_response_fixes_1123_typo_to_123() -> None:
+    junk = (
+        "применяются федеральные требования 1123-ФЗ и СанПиН; "
+        "ст. 69 Федерального закона от 22.07.2008 № 1123-ФЗ "
+        "«Технический регламент о требованиях пожарной безопасности»"
+    )
+    cleaned = nodes._polish_response_text(junk)
+    assert "1123-ФЗ" not in cleaned
+    assert cleaned.count("123-ФЗ") >= 2
+
+
+def test_polish_response_collapses_numbered_enter_gaps() -> None:
+    junk = "Чем отличаются:\n1.\n\n\nМосковская область устанавливает нормы.\n2.\n\nТекст."
+    cleaned = nodes._polish_response_text(junk)
+    assert "1. Московская" in cleaned
+    assert "2. Текст" in cleaned
+    assert "1.\n\n" not in cleaned
+
+
+def test_format_item_source_omits_polozheniya_without_punkt() -> None:
+    cite = nodes._format_item_source("склад", "региональный", "moscow_oblast")
+    assert cite == ""
+    assert "положения" not in cite.lower()
 
 
 def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> None:

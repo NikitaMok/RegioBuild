@@ -972,14 +972,18 @@ _JUNK_CITATION_TOKEN_RE = re.compile(
     r"[а-яёa-z0-9]{1,6}-доп/[^\s,;).]+"
     r")"
 )
-# чужие федеральные законы (в индексе — 123-ФЗ); типичные галлюцинации LLM
+# канон пожарного техрегламента: 123 / опечатки 1123 / артефакт 11123
+_FIRE_TECHREG_FZ_RE = re.compile(r"(?i)(?<!\d)1*123\s*-?\s*ФЗ")
+# чужие N-ФЗ (не 123); (?<!\d) чтобы не отрезать «23» из «123-ФЗ»
 _FOREIGN_FZ_RE = re.compile(
-    r"(?i)(?:Федеральн(?:ый|ого)\s+закон(?:а)?\s*)?(?:№\s*)?(?!123)(\d{2,3})\s*-?\s*ФЗ"
+    r"(?i)(?:Федеральн(?:ый|ого)\s+закон(?:а)?\s*)?(?:№\s*)?(?<!\d)(\d{2,4})\s*-?\s*ФЗ"
     r"(?:\s*\([^)]{0,100}\))?"
 )
 _FIRE_FZ_CONTEXT_RE = re.compile(
-    r"(?i)пожар|эвакуац|противопожарн|ст\.\s*69|ст\.\s*88"
+    r"(?i)пожар|эвакуац|противопожарн|ст\.\s*69|ст\.\s*88|техн\w*\s+регламент"
 )
+# «1.» + куча Enter → «1. » (типичный рваный compare)
+_NUMBERED_GAP_RE = re.compile(r"(?m)(^|\n)(\d{1,2})\.\s*\n+")
 # явные опечатки субъектов (до канонических display_name)
 _REGION_SPELLING_FIXES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"Сердловск", re.IGNORECASE), "Свердловск"),
@@ -1192,11 +1196,10 @@ def _format_item_source(citation: str, source_level: str, region_code: str) -> s
     Без номера структурной единицы — пустая строка (не канцелярит и не ложная ссылка).
     """
     punkt = _punkt_label(citation)
-    if not punkt:
+    # без номера пункта не ссылаемся на «положения Приказа» — это ложная точность
+    if not punkt or punkt == "положения":
         return ""
     npa = _npa_after_clause(_full_npa_for_item(citation, source_level, region_code))
-    if punkt == "положения":
-        return f"({_esc(punkt)} {_esc(npa)})"
     return f"({_esc(punkt)} {_esc(npa)})"
 
 
@@ -1226,7 +1229,7 @@ def _format_compare_side(
     side_emoji: str,
 ) -> str:
     region = get_region(region_code)
-    humanized = _humanize_missing_value(value)
+    humanized = _compact_inline_newlines(_humanize_missing_value(value))
     # при отсутствии нормы — юридическая фраза без ссылки на НПА (акт уже в шапке)
     if _is_absent_requirement_value(value):
         return (
@@ -1238,7 +1241,7 @@ def _format_compare_side(
     else:
         npa = get_region(region_code).document_title
     punkt = _punkt_label(citation)
-    if not punkt:
+    if not punkt or punkt == "положения":
         return (
             f"  {side_emoji} <b>{_esc(region.display_name)}</b>: "
             f"{_esc(humanized)}"
@@ -1409,8 +1412,7 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         f"⚖ {region_b.display_name} — правовое регулирование: {_esc(region_b.document_title)} "
         f"(проверено {region_b.last_verified})",
         f"📜 Федеральные нормы: {_esc(sp_label)}.",
-        "",
-        _esc(comparison.overall_summary),
+        _esc(_compact_inline_newlines(comparison.overall_summary)),
     ]
 
     commons = [item for item in (comparison.common_requirements or []) if _is_concrete_common(item)]
@@ -1418,7 +1420,6 @@ def _render_comparison(comparison: ComparisonResult) -> str:
 
     # сначала различия, потом совпадения (только конкретные)
     if differences:
-        lines.append("")
         lines.append("<b>Чем отличаются:</b>")
         groups = _group_by_category(differences)
         diff_number = 1
@@ -1426,7 +1427,6 @@ def _render_comparison(comparison: ComparisonResult) -> str:
             category_diffs = groups.get(category) or []
             if not category_diffs:
                 continue
-            lines.append("")
             lines.append(f"<b>{_category_label(category)}</b>")
             specific = [diff for diff in category_diffs if diff.is_specific]
             general = [diff for diff in category_diffs if not diff.is_specific]
@@ -1436,7 +1436,8 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                     "нормативных правовых актов:"
                 )
             for diff in specific + general:
-                lines.append(f"{diff_number}. {_esc(diff.summary)}")
+                summary = _compact_inline_newlines(diff.summary)
+                lines.append(f"{diff_number}. {_esc(summary)}")
                 lines.append(
                     _format_compare_side(
                         comparison.region_a,
@@ -1457,12 +1458,10 @@ def _render_comparison(comparison: ComparisonResult) -> str:
                 )
                 diff_number += 1
     else:
-        lines.append("")
         lines.append("<b>Чем отличаются:</b>")
         lines.append("Различий не обнаружено.")
 
     if commons:
-        lines.append("")
         lines.append("<b>Что совпадает:</b>")
         lines.append(
             "Следующие требования совпадают либо одинаково опираются на федеральные нормы:"
@@ -1470,30 +1469,37 @@ def _render_comparison(comparison: ComparisonResult) -> str:
         for index, item in enumerate(commons, start=1):
             source_code = FEDERAL_CODE if item.source_level == "федеральный" else comparison.region_a
             source = _format_item_source(item.citation, item.source_level, source_code)
-            lines.append(f"{index}. {_esc(item.description)} {source}")
+            desc = _compact_inline_newlines(item.description)
+            lines.append(f"{index}. {_esc(desc)} {source}".rstrip())
     elif not differences:
-        lines.append("")
         lines.append(
             "Требования не установлены ни в региональных, ни в федеральных "
             "нормативных материалах в объёме доступных источников. Рекомендуем "
             "проверить ПЗЗ и отраслевые НПА напрямую."
         )
 
-    lines.append("")
     lines.append(format_additional_checks_block(comparison.business_type))
-    return "\n".join(lines)
+    return "\n".join(line for line in lines if line is not None)
+
+
+def _compact_inline_newlines(text: str) -> str:
+    """Убрать лишние Enter внутри полей LLM (после «1.» и между фразами)."""
+    cleaned = (text or "").strip()
+    cleaned = re.sub(r"[ \t]*\n[ \t]*", " ", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return cleaned.strip()
 
 
 def _sanitize_foreign_fz_refs(text: str) -> str:
-    """Чужие N-ФЗ: в пожарном контексте → 123-ФЗ; иначе убрать ссылку без подмены."""
-    source = text or ""
+    """Канон 123-ФЗ; чужие N-ФЗ в пожарном контексте → 123-ФЗ, иначе убрать."""
+    source = _FIRE_TECHREG_FZ_RE.sub("123-ФЗ", text or "")
 
     def _replace(match: re.Match[str]) -> str:
         num = match.group(1)
         if num == "123":
-            return match.group(0)
-        start = max(0, match.start() - 140)
-        end = min(len(source), match.end() + 140)
+            return "123-ФЗ"
+        start = max(0, match.start() - 160)
+        end = min(len(source), match.end() + 160)
         window = source[start:end]
         if _FIRE_FZ_CONTEXT_RE.search(window):
             return "123-ФЗ"
@@ -1511,10 +1517,10 @@ def _polish_response_text(text: str) -> str:
     cleaned = re.sub(r";\s*обязательн", ". При этом обязательн", cleaned, flags=re.IGNORECASE)
     # оставшиеся «;» между смысловыми частями — точка (не канцелярская склейка)
     cleaned = re.sub(r";\s+(?=[А-ЯЁA-Z])", ". ", cleaned)
-    # отдельный абзац перед предложением о другом субъекте / «А в …»
-    cleaned = re.sub(r"\.\s+В\s+", ".\n\nВ ", cleaned)
-    cleaned = re.sub(r"\.\s+А\s+в\s+", ".\n\nА в ", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\.\s+Общим\s+", ".\n\nОбщим ", cleaned)
+    # новый абзац перед другим субъектом — один перевод, без «дыр»
+    cleaned = re.sub(r"\.\s+В\s+", ".\nВ ", cleaned)
+    cleaned = re.sub(r"\.\s+А\s+в\s+", ".\nА в ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\.\s+Общим\s+", ".\nОбщим ", cleaned)
     # убрать гигантские перечни чисел и цепочки «1.1.1.1…»
     cleaned = _NUMBER_LIST_ARTIFACT_RE.sub("\n", cleaned)
     cleaned = _DOTTED_RUNAWAY_RE.sub("", cleaned)
@@ -1555,6 +1561,8 @@ def _polish_response_text(text: str) -> str:
     cleaned = re.sub(r"\(\s*\)", "", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    # «1.\n\n\nтекст» → «1. текст»
+    cleaned = _NUMBERED_GAP_RE.sub(r"\1\2. ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
