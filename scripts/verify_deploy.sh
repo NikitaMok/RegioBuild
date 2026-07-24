@@ -135,8 +135,10 @@ if ! docker compose -f "$COMPOSE_FILE" --env-file .env ps --status running --ser
 fi
 echo "bot: running"
 
-# Карточка бота в Telegram (экран до /start)
-docker compose -f "$COMPOSE_FILE" --env-file .env exec -T bot python - <<'PY' || fail "не удалось обновить описание бота в Telegram"
+# Карточка бота в Telegram (экран до /start).
+# Важно: пустой description для language_code=ru перекрывает default —
+# русскоязычный клиент видит «Здесь пока ничего нет…».
+docker compose -f "$COMPOSE_FILE" --env-file .env exec -T bot python - <<'PY' || fail "не удалось обновить/проверить описание бота в Telegram"
 import asyncio
 from aiogram import Bot
 from app.bot.profile import BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION
@@ -148,9 +150,22 @@ async def main() -> None:
         raise SystemExit("TELEGRAM_BOT_TOKEN пуст")
     bot = Bot(token=token)
     try:
-        await bot.set_my_short_description(BOT_SHORT_DESCRIPTION)
-        await bot.set_my_description(BOT_DESCRIPTION)
-        print("telegram profile: ok")
+        for lang in (None, "ru"):
+            kwargs = {} if lang is None else {"language_code": lang}
+            await bot.set_my_short_description(BOT_SHORT_DESCRIPTION, **kwargs)
+            await bot.set_my_description(BOT_DESCRIPTION, **kwargs)
+        # Читаем именно ru — как у пользователя с русским Telegram
+        short_ru = await bot.get_my_short_description(language_code="ru")
+        desc_ru = await bot.get_my_description(language_code="ru")
+        short_text = (short_ru.short_description or "").strip()
+        desc_text = (desc_ru.description or "").strip()
+        if not short_text:
+            raise SystemExit("VERIFY FAIL: short_description для ru пуст")
+        if not desc_text:
+            raise SystemExit("VERIFY FAIL: description для ru пуст — экран до СТАРТ будет пустым")
+        if "формирует перечень" not in desc_text.lower() and "формирует" not in desc_text.lower():
+            raise SystemExit("VERIFY FAIL: description для ru не содержит формулировку о перечне требований")
+        print("telegram profile: ok (default + ru)")
     finally:
         await bot.session.close()
 

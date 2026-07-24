@@ -520,13 +520,13 @@ def test_polish_response_strips_slash_s_artifact() -> None:
 
 def test_format_response_aspect_refusal_is_primary_answer() -> None:
     refusal = (
-        "По вашему запросу в доступных источниках сервиса не установлены "
+        "По Вашему запросу в доступных источниках сервиса не установлены "
         "прямые нормативы по площади участка."
     )
     result = nodes.format_response(
         {"error": refusal, "refusal_kind": "aspect"}
     )
-    assert result["response_text"].startswith("По вашему запросу")
+    assert result["response_text"].startswith("По Вашему запросу")
     assert "Не удалось получить ответ" not in result["response_text"]
     assert "Вышеуказанные сведения носят справочный характер!" in result["response_text"]
     assert "<i>" in result["response_text"]

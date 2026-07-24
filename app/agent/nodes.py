@@ -1343,7 +1343,7 @@ def format_response(state: AgentState) -> AgentState:
     if state.get("error"):
         err = state["error"] or ""
         # явный отказ по аспекту (площадь участка и т.п.) — основной ответ + дисклеймер
-        if state.get("refusal_kind") == "aspect" or err.startswith("По вашему запросу"):
+        if state.get("refusal_kind") == "aspect" or err.startswith("По Вашему запросу"):
             return {
                 **state,
                 "response_text": _esc(err) + DISCLAIMER_TEXT,

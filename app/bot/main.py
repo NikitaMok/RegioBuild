@@ -16,13 +16,17 @@ from app.core.config import get_settings
 
 
 async def _publish_bot_profile(bot: Bot) -> None:
-    """Карточка «Что умеет этот бот?» — иначе у нового пользователя пустой экран."""
+    """Карточка до /start. Обязательно и default, и ru: пустой ru перекрывает default."""
+    # language_code=None — fallback; "ru" — для русскоязычного клиента Telegram.
+    locales: tuple[str | None, ...] = (None, "ru")
     last_exc: Exception | None = None
     for attempt in range(1, 4):
         try:
-            await bot.set_my_short_description(BOT_SHORT_DESCRIPTION)
-            await bot.set_my_description(BOT_DESCRIPTION)
-            logger.info("описание бота в Telegram обновлено")
+            for lang in locales:
+                kwargs = {} if lang is None else {"language_code": lang}
+                await bot.set_my_short_description(BOT_SHORT_DESCRIPTION, **kwargs)
+                await bot.set_my_description(BOT_DESCRIPTION, **kwargs)
+            logger.info("описание бота в Telegram обновлено (default + ru)")
             return
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
