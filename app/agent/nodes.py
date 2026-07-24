@@ -972,6 +972,14 @@ _JUNK_CITATION_TOKEN_RE = re.compile(
     r"[а-яёa-z0-9]{1,6}-доп/[^\s,;).]+"
     r")"
 )
+# чужие федеральные законы (в индексе — 123-ФЗ); типичные галлюцинации LLM
+_FOREIGN_FZ_RE = re.compile(
+    r"(?i)(?:Федеральн(?:ый|ого)\s+закон(?:а)?\s*)?(?:№\s*)?(?!123)(\d{2,3})\s*-?\s*ФЗ"
+    r"(?:\s*\([^)]{0,100}\))?"
+)
+_FIRE_FZ_CONTEXT_RE = re.compile(
+    r"(?i)пожар|эвакуац|противопожарн|ст\.\s*69|ст\.\s*88"
+)
 # явные опечатки субъектов (до канонических display_name)
 _REGION_SPELLING_FIXES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"Сердловск", re.IGNORECASE), "Свердловск"),
@@ -1476,6 +1484,24 @@ def _render_comparison(comparison: ComparisonResult) -> str:
     return "\n".join(lines)
 
 
+def _sanitize_foreign_fz_refs(text: str) -> str:
+    """Чужие N-ФЗ: в пожарном контексте → 123-ФЗ; иначе убрать ссылку без подмены."""
+    source = text or ""
+
+    def _replace(match: re.Match[str]) -> str:
+        num = match.group(1)
+        if num == "123":
+            return match.group(0)
+        start = max(0, match.start() - 140)
+        end = min(len(source), match.end() + 140)
+        window = source[start:end]
+        if _FIRE_FZ_CONTEXT_RE.search(window):
+            return "123-ФЗ"
+        return ""
+
+    return _FOREIGN_FZ_RE.sub(_replace, source)
+
+
 def _polish_response_text(text: str) -> str:
     """Связные переходы между регионами и отсечение артефактов (списки чисел, /с/)."""
     cleaned = text or ""
@@ -1495,6 +1521,7 @@ def _polish_response_text(text: str) -> str:
     cleaned = _collapse_phrase_loops(cleaned)
     cleaned = _fix_region_spellings(cleaned)
     cleaned = _strip_junk_citation_tokens(cleaned)
+    cleaned = _sanitize_foreign_fz_refs(cleaned)
     # артефакты генерации: «### /с/ /с/…», markdown-заголовки вне HTML
     cleaned = _SLASH_S_ARTIFACT_RE.sub("", cleaned)
     cleaned = _MARKDOWN_HEADING_RE.sub("", cleaned)
@@ -1557,7 +1584,7 @@ def format_response(state: AgentState) -> AgentState:
 
     body = _polish_response_text(body)
 
-    from app.agent.guardrail import build_refusal, claim_numbers_supported
+    from app.agent.guardrail import build_guardrail_warning, claim_numbers_supported
 
     context_chunks = (
         list(state.get("retrieved_a") or [])
@@ -1572,16 +1599,14 @@ def format_response(state: AgentState) -> AgentState:
         if not line.lstrip().startswith(("🏛", "📜", "⚖"))
         and "Правовое регулирование" not in line
     )
+    warning = ""
     if context_chunks and not claim_numbers_supported(guardrail_plain, context_chunks):
-        logger.warning("guardrail заблокировал ответ")
-        return {
-            **state,
-            "guardrail_blocked": True,
-            "response_text": prefix + build_refusal(context_chunks) + DISCLAIMER_TEXT,
-        }
+        # мягкий режим: сохраняем структурированный ответ, просим сверить цифры
+        logger.warning("guardrail: soft warning (ответ сохранён)")
+        warning = build_guardrail_warning(context_chunks) + "\n\n"
 
     return {
         **state,
         "guardrail_blocked": False,
-        "response_text": prefix + body + DISCLAIMER_TEXT,
+        "response_text": prefix + warning + body + DISCLAIMER_TEXT,
     }

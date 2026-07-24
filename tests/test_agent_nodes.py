@@ -622,6 +622,95 @@ def test_format_response_appends_disclaimer_on_success() -> None:
     assert "Справочный характер сведений</b>." not in result["response_text"]
 
 
+def test_format_response_soft_warn_keeps_compare_body() -> None:
+    comparison = ComparisonResult(
+        region_a="moscow_oblast",
+        region_b="tatarstan",
+        business_type="склад",
+        overall_summary="Требования различаются по парковке.",
+        differences=[
+            DifferenceItem(
+                category="градостроительные",
+                region_a_value="Парковка по приложению N 10.",
+                region_b_value="Специальных региональных норм нет.",
+                summary="В МО есть детализация парковки",
+                citation_a="прил.10",
+                citation_b="",
+            )
+        ],
+        common_requirements=[
+            CommonRequirementItem(
+                category="пожарная_безопасность",
+                description="Противопожарные расстояния по ст. 69 123-ФЗ.",
+                citation="123-ФЗ/69",
+                source_level="федеральный",
+            )
+        ],
+    )
+    chunks = [
+        RetrievedChunk(
+            id="1",
+            text="[Документ: Нормативы градостроительного проектирования Московской области] склад",
+            region_code="RU-MOS",
+            section_number="5.26",
+            category=None,
+            distance=0.1,
+        ),
+        RetrievedChunk(
+            id="2",
+            text="[Документ: Республиканские нормативы градостроительного проектирования Республики Татарстан] склад",
+            region_code="RU-TA",
+            section_number="4.4.58",
+            category=None,
+            distance=0.1,
+        ),
+    ]
+    # числа вне контекста → soft warning, не полная блокировка
+    state = {
+        "mode": "compare",
+        "business_type": "склад",
+        "comparison": comparison,
+        "retrieved_a": chunks[:1],
+        "retrieved_b": chunks[1:],
+        "retrieved_federal": [],
+    }
+    comparison.differences[0].region_a_value = (
+        "Нужно 777 мест, отступ 888 метров и ещё 999 машиномест."
+    )
+    result = nodes.format_response(state)
+    text = result["response_text"]
+    assert result.get("guardrail_blocked") is False
+    assert "заблокирован" not in text.lower()
+    assert "расхождения" in text.lower()
+    assert "Чем отличаются" in text or "отлича" in text.lower()
+    assert "Региональные требования" in text or "Московск" in text
+
+
+def test_polish_response_replaces_wrong_fz_in_fire_context() -> None:
+    junk = (
+        "Противопожарные расстояния определяются по Федеральному закону "
+        "№ 172-ФЗ (от 05.04.2013 № 115-ФЗ), ст. 69."
+    )
+    cleaned = nodes._polish_response_text(junk)
+    assert "172-ФЗ" not in cleaned
+    assert "115-ФЗ" not in cleaned
+    assert "123-ФЗ" in cleaned
+
+
+def test_polish_response_strips_wrong_fz_outside_fire_context() -> None:
+    junk = "Планирование территории ведётся с учётом 172-ФЗ о стратегическом планировании."
+    cleaned = nodes._polish_response_text(junk)
+    assert "172-ФЗ" not in cleaned
+    assert "123-ФЗ" not in cleaned
+    assert "стратегическом планировании" in cleaned
+
+
+def test_polish_response_keeps_correct_123_fz() -> None:
+    text = "Эвакуационные пути — по ст. 88 123-ФЗ."
+    cleaned = nodes._polish_response_text(text)
+    assert "123-ФЗ" in cleaned
+
+
 def test_render_comparison_flags_general_norms_when_no_specific_ones_found() -> None:
     comparison = ComparisonResult(
         region_a="moscow_oblast",

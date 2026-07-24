@@ -46,3 +46,42 @@ def test_guardrail_ignores_npa_header_dates() -> None:
         "Автомойка: 50 метров по п. 5.5.153."
     )
     assert claim_numbers_supported(headerish, chunks)
+
+
+def test_guardrail_ignores_npa_requisite_numbers_in_body() -> None:
+    chunks = [
+        RetrievedChunk(
+            id="1",
+            text="Для складов применяются федеральные нормы.",
+            region_code="RU-MOS",
+            section_number="5.26",
+            category=None,
+            distance=0.1,
+        )
+    ]
+    body = (
+        "По Постановлению № 713/30 парковка по приложению. "
+        "В Республике Татарстан — Постановление № 1071. "
+        "Ориентир 450 метров вне фрагментов."
+    )
+    # 713, 1071 — реквизиты; одно лишнее число (450) — ещё не блок
+    assert claim_numbers_supported(body, chunks)
+
+
+def test_build_guardrail_warning_keeps_docs() -> None:
+    from app.agent.guardrail import build_guardrail_warning
+
+    chunks = [
+        RetrievedChunk(
+            id="1",
+            text="[Документ: Нормативы градостроительного проектирования Московской области] текст",
+            region_code="RU-MOS",
+            section_number="1",
+            category=None,
+            distance=0.1,
+        )
+    ]
+    warning = build_guardrail_warning(chunks)
+    assert "заблокирован" not in warning.lower()
+    assert "расхождения" in warning.lower()
+    assert "Нормативы градостроительного проектирования Московской области" in warning
