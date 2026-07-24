@@ -11,21 +11,27 @@ from aiogram.enums import ParseMode
 from loguru import logger
 
 from app.bot.handlers import common, compare_mode, feedback, info_mode
+from app.bot.profile import BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION
 from app.core.config import get_settings
 
-# Карточка «Что умеет этот бот?» в Telegram (не путать с ответом на /start).
-BOT_SHORT_DESCRIPTION = (
-    "Справка по РНГП/ТСН пяти субъектов РФ и федеральным нормам для объектов КС"
-)
-BOT_DESCRIPTION = (
-    "RegioBuild — справочный сервис по региональным нормативам градостроительного "
-    "проектирования (РНГП/ТСН) пяти субъектов Российской Федерации и федеральному "
-    "нормативному фону (ГрК РФ, СП 42.13330, 123-ФЗ, СанПиН) для объектов "
-    "капитального строительства.\n\n"
-    "Команда /start открывает меню. Сведения носят справочный характер и не "
-    "заменяют юридическую консультацию; акты органов местного самоуправления "
-    "(включая ПЗЗ) подлежат отдельной проверке."
-)
+
+async def _publish_bot_profile(bot: Bot) -> None:
+    """Карточка «Что умеет этот бот?» — иначе у нового пользователя пустой экран."""
+    last_exc: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            await bot.set_my_short_description(BOT_SHORT_DESCRIPTION)
+            await bot.set_my_description(BOT_DESCRIPTION)
+            logger.info("описание бота в Telegram обновлено")
+            return
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            logger.warning(f"попытка {attempt}/3 обновить описание бота: {exc}")
+            await asyncio.sleep(1.5 * attempt)
+    logger.error(
+        f"не удалось опубликовать описание бота в Telegram после 3 попыток: {last_exc}. "
+        "У новых пользователей экран до /start будет пустым."
+    )
 
 
 async def main() -> None:
@@ -34,15 +40,20 @@ async def main() -> None:
         logger.error("TELEGRAM_BOT_TOKEN не задан в .env. Токен выдаёт @BotFather.")
         sys.exit(1)
 
+    if len(BOT_DESCRIPTION) > 512:
+        logger.error(f"BOT_DESCRIPTION слишком длинный: {len(BOT_DESCRIPTION)} > 512")
+        sys.exit(1)
+    if len(BOT_SHORT_DESCRIPTION) > 120:
+        logger.error(
+            f"BOT_SHORT_DESCRIPTION слишком длинный: {len(BOT_SHORT_DESCRIPTION)} > 120"
+        )
+        sys.exit(1)
+
     bot = Bot(
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    try:
-        await bot.set_my_short_description(BOT_SHORT_DESCRIPTION)
-        await bot.set_my_description(BOT_DESCRIPTION)
-    except Exception as exc:
-        logger.warning(f"не удалось обновить описание бота в Telegram: {exc}")
+    await _publish_bot_profile(bot)
 
     dispatcher = Dispatcher()
     dispatcher.include_router(common.router)

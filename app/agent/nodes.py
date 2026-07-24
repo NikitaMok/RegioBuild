@@ -1294,6 +1294,13 @@ def _polish_response_text(text: str) -> str:
     # «…центров; в Республике…» → «…центров. А в Республике…»
     cleaned = re.sub(r";\s*в\s+", ". А в ", cleaned)
     cleaned = re.sub(r";\s*а\s+в\s+", ". А в ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r";\s*обязательн", ". При этом обязательн", cleaned, flags=re.IGNORECASE)
+    # оставшиеся «;» между смысловыми частями — точка (не канцелярская склейка)
+    cleaned = re.sub(r";\s+(?=[А-ЯЁA-Z])", ". ", cleaned)
+    # отдельный абзац перед предложением о другом субъекте / «А в …»
+    cleaned = re.sub(r"\.\s+В\s+", ".\n\nВ ", cleaned)
+    cleaned = re.sub(r"\.\s+А\s+в\s+", ".\n\nА в ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\.\s+Общим\s+", ".\n\nОбщим ", cleaned)
     # убрать гигантские перечни чисел
     cleaned = _NUMBER_LIST_ARTIFACT_RE.sub("\n", cleaned)
     # артефакты генерации: «### /с/ /с/…», markdown-заголовки вне HTML

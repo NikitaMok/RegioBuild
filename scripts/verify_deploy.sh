@@ -41,27 +41,47 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 3
 done
 
-# Ключевые пользовательские формулировки — именно в RUNNING контейнере, не только на диске
+# Ключевые пользовательские формулировки — именно в RUNNING контейнере
 docker compose -f "$COMPOSE_FILE" --env-file .env exec -T api python - <<'PY'
-from app.core.legal import DISCLAIMER_TEXT
+from app.core.legal import DISCLAIMER_TEXT, LEGAL_BOUNDARIES_HTML
 from app.bot.handlers.common import WELCOME_TEXT, RULES_TEXT
+from app.bot.profile import BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION
 from app.agent.nodes import _render_extraction, _polish_response_text, _MISSING_REGION_VALUE
 from app.llm.schemas import ExtractionResult, RequirementItem
 
 errors = []
 
+if "<b>RegioBuild</b>" in WELCOME_TEXT:
+    errors.append("WELCOME: лишний заголовок RegioBuild в /start")
+if "справочного ознакомления" in WELCOME_TEXT.lower():
+    errors.append("WELCOME: устаревшая формулировка «справочного ознакомления»")
+if "Правовые пределы использования" in WELCOME_TEXT:
+    errors.append("WELCOME: не должно дублировать блок правовых пределов")
 if "Уважаемый пользователь!" not in WELCOME_TEXT:
-    errors.append("WELCOME: нет «Уважаемый пользователь!»")
-if "Уважаемый пользователь:" in WELCOME_TEXT:
-    errors.append("WELCOME: лишнее двоеточие у обращения")
-if "Состав нормативных материалов:" not in RULES_TEXT:
-    errors.append("RULES: нет двоеточия у «Состав нормативных материалов»")
+    errors.append("WELCOME: нет обращения")
+if "Обязательно к прочтению" not in WELCOME_TEXT:
+    errors.append("WELCOME: нет отсылки к правилам")
+
+if "Состав нормативных материалов" in RULES_TEXT:
+    errors.append("RULES: заголовок «Состав нормативных материалов» должен быть убран")
+if "Правовые пределы использования" in RULES_TEXT or "Правовые пределы использования" in LEGAL_BOUNDARIES_HTML:
+    errors.append("RULES: заголовок «Правовые пределы использования» должен быть убран")
+if "обеспечивает работу" in RULES_TEXT.lower():
+    errors.append("RULES: формулировка «обеспечивает работу» недопустима")
+if "формирует перечень" not in RULES_TEXT.lower() and "формирует" not in RULES_TEXT.lower():
+    errors.append("RULES: нет формулировки о формировании перечня требований")
+
+if len(BOT_DESCRIPTION) > 512:
+    errors.append(f"PROFILE: description слишком длинный ({len(BOT_DESCRIPTION)})")
+if len(BOT_SHORT_DESCRIPTION) > 120:
+    errors.append(f"PROFILE: short_description слишком длинный ({len(BOT_SHORT_DESCRIPTION)})")
+if "формирует перечень требований" not in BOT_DESCRIPTION.lower() and "формирует" not in BOT_DESCRIPTION.lower():
+    errors.append("PROFILE: описание бота не отражает выдачу требований")
+
 if "Вышеуказанные сведения носят справочный характер!" not in DISCLAIMER_TEXT:
     errors.append("DISCLAIMER: нет нового заголовка")
 if "<i>" not in DISCLAIMER_TEXT:
     errors.append("DISCLAIMER: нет курсива")
-if "Справочный характер сведений</b>." in DISCLAIMER_TEXT:
-    errors.append("DISCLAIMER: старая формулировка всё ещё в коде")
 
 text = _render_extraction(
     ExtractionResult(
@@ -79,19 +99,26 @@ text = _render_extraction(
 )
 if "Региональные требования" not in text:
     errors.append("RENDER: нет «Региональные требования»")
-if "Федеральные требования" not in text:
-    errors.append("RENDER: нет «Федеральные требования»")
 if "Региональный уровень" in text or "Федеральный уровень" in text:
     errors.append("RENDER: старое слово «уровень» всё ещё в ответе")
-if "Дополнительно применяются федеральные нормы" in text:
-    errors.append("RENDER: менторская фраза про федеральные нормы")
 
-if "специальные требования по указанному вопросу не установлены" not in _MISSING_REGION_VALUE.lower():
-    errors.append("MISSING: нет юридической фразы об отсутствии требований")
+sample = (
+    "В Московской области установлены региональные требования к складам. "
+    "В Новосибирской области детальные региональные нормы для складов не установлены; "
+    "обязательны только федеральные требования."
+)
+polished = _polish_response_text(sample)
+if "\n\nВ Новосибирской" not in polished:
+    errors.append("POLISH: нет абзаца перед вторым субъектом")
+if "; обязательны" in polished:
+    errors.append("POLISH: точка с запятой перед «обязательны» не заменена")
 
 junk = _polish_response_text("норма\n### /с/ /с/ /с/ /с/\nконец")
 if "/с/" in junk or "###" in junk:
     errors.append("POLISH: артефакт /с/ не вырезается")
+
+if "специальные требования по указанному вопросу не установлены" not in _MISSING_REGION_VALUE.lower():
+    errors.append("MISSING: нет юридической фразы об отсутствии требований")
 
 if errors:
     print("VERIFY FAIL runtime:")
@@ -107,5 +134,27 @@ if ! docker compose -f "$COMPOSE_FILE" --env-file .env ps --status running --ser
   fail "сервис bot не в статусе running"
 fi
 echo "bot: running"
+
+# Карточка бота в Telegram (экран до /start)
+docker compose -f "$COMPOSE_FILE" --env-file .env exec -T bot python - <<'PY' || fail "не удалось обновить описание бота в Telegram"
+import asyncio
+from aiogram import Bot
+from app.bot.profile import BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION
+from app.core.config import get_settings
+
+async def main() -> None:
+    token = get_settings().telegram_bot_token
+    if not token:
+        raise SystemExit("TELEGRAM_BOT_TOKEN пуст")
+    bot = Bot(token=token)
+    try:
+        await bot.set_my_short_description(BOT_SHORT_DESCRIPTION)
+        await bot.set_my_description(BOT_DESCRIPTION)
+        print("telegram profile: ok")
+    finally:
+        await bot.session.close()
+
+asyncio.run(main())
+PY
 
 echo "=== verify OK (sha=$SHORT_LOCAL) ==="

@@ -486,6 +486,17 @@ def test_polish_response_fixes_semicolon_region_glue() -> None:
     assert "А в Республике" in text
 
 
+def test_polish_response_splits_region_paragraphs() -> None:
+    text = nodes._polish_response_text(
+        "В Московской области установлены региональные требования к складам. "
+        "В Новосибирской области детальные региональные нормы для складов не установлены; "
+        "обязательны только федеральные требования."
+    )
+    assert "\n\nВ Новосибирской" in text
+    assert "; обязательны" not in text
+    assert "При этом обязательны" in text or "обязательны только" in text
+
+
 def test_polish_response_strips_number_list_artifact() -> None:
     junk = "Норма.\n" + ", ".join(str(i) for i in range(1, 40)) + "\nКонец."
     cleaned = nodes._polish_response_text(junk)
