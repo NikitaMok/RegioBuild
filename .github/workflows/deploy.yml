@@ -45,4 +45,10 @@ jobs:
             cd "$ROOT"
             export DEPLOY_PATH="$ROOT"
             export DEPLOY_BRANCH=main
+            # SHA из GitHub Actions — если на сервере другой коммит, verify упадёт
+            export EXPECTED_SHA="${{ github.sha }}"
             bash scripts/deploy_remote.sh
+            # двойной контроль: verify ещё раз явно (скрипт уже внутри deploy, но лог читаемее)
+            export EXPECTED_SHA="${{ github.sha }}"
+            bash scripts/verify_deploy.sh
+            echo "CI deploy gate passed for ${{ github.sha }}"
