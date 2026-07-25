@@ -23,15 +23,20 @@ construction object in a chosen constituent entity of the Russian Federation by
 analysing RNGP/TSN and the applicable federal layer, and compares requirements
 across two entities when needed.
 
-Telegram is only a demonstration channel here. The product core is an HTTP API
-(`/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`). External systems
-integrate independently of the messenger.
+Telegram ([https://t.me/regiobuild_bot](https://t.me/regiobuild_bot)) is only a
+demonstration channel here. The product core is an HTTP API (`/info`,
+`/compare`, `/api/v1/*`, `/health`, `/metrics`). External systems integrate
+independently of the messenger.
 
-**Terms of use.** RegioBuild is a reference tool, not legal advice. The answers
-do not replace design documentation and/or a lawyer’s opinion, nor an
-independent check that norms are current at the time of the request. Municipal
-land-use rules (PZZ) are not included in the index, so they must still be
-verified separately.
+---
+
+## Terms of use
+
+RegioBuild is a reference tool, not legal advice.  
+The answers do not replace design documentation and/or a lawyer’s opinion, nor
+an independent check that norms are current at the time of the request.  
+Municipal land-use rules (PZZ) are not included in the index, so they must
+still be verified separately.  
 Details: [`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
 
 ---
@@ -49,16 +54,19 @@ Details: [`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
 
 ## Query examples
 
+### Query No. 1 — hotel comparison (Novosibirsk Oblast ↔ Moscow Oblast)
+
 <table width="100%">
   <tr>
-    <td width="50%"><img src="docs/screenshots/03-compare-hotel-1.png" alt="Hotel compare, part 1" width="100%"></td>
-    <td width="50%"><img src="docs/screenshots/04-compare-hotel-2.png" alt="Hotel compare, part 2" width="100%"></td>
+    <td width="33%"><img src="docs/screenshots/03-compare-hotel-1.png" alt="Hotel compare, part 1" width="100%"></td>
+    <td width="33%"><img src="docs/screenshots/04-compare-hotel-2.png" alt="Hotel compare, part 2" width="100%"></td>
+    <td width="33%"><img src="docs/screenshots/05-compare-hotel-3.png" alt="Hotel compare, part 3" width="100%"></td>
   </tr>
-  <tr>
-    <td colspan="2" align="center">
-      <img src="docs/screenshots/05-compare-hotel-3.png" alt="Hotel compare, part 3" width="50%">
-    </td>
-  </tr>
+</table>
+
+### Query No. 2 — car wash (Sverdlovsk Oblast)
+
+<table width="100%">
   <tr>
     <td width="50%"><img src="docs/screenshots/06-info-carwash-1.png" alt="Car wash in Sverdlovsk Oblast" width="100%"></td>
     <td width="50%"><img src="docs/screenshots/07-info-carwash-2.png" alt="Federal block and disclaimer" width="100%"></td>
