@@ -47,6 +47,21 @@ def test_parse_json_response_repairs_trailing_comma() -> None:
     assert result.value == 2
 
 
+def test_parse_json_response_drops_incomplete_items() -> None:
+    from app.llm.schemas import ExtractionResult
+
+    raw = (
+        '{"region_code": "RU-TA", "business_type": "автосалон", "items": ['
+        '{"category": "градостроительные", "description": "Норма парковки.", '
+        '"citation": "пункт 5.1", "is_specific": false, "source_level": "региональный"}, '
+        '{"category": "градостроительные", "source_level": "федеральный"}'
+        "]}"
+    )
+    result = parse_json_response(raw, ExtractionResult)
+    assert len(result.items) == 1
+    assert result.items[0].description == "Норма парковки."
+
+
 def test_friendly_llm_failure_auth() -> None:
     from app.llm.base import LLMProviderError
     from app.llm.errors import friendly_llm_failure
@@ -57,3 +72,13 @@ def test_friendly_llm_failure_auth() -> None:
     )
     assert "401" in msg
     assert "GIGACHAT_CREDENTIALS" in msg
+
+
+def test_friendly_llm_failure_parse_is_product_soft() -> None:
+    from app.llm.errors import friendly_llm_failure
+    from app.llm.parsing import LLMParsingError
+
+    msg = friendly_llm_failure(LLMParsingError("bad json"), mode="info")
+    assert "формат" not in msg.lower()
+    assert "перечень требований" in msg
+    assert "автосалон" in msg

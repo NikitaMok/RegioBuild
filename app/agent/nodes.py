@@ -616,18 +616,36 @@ def _retrieve_for_region(
     return chunks[:max_chunks]
 
 
+def _retrieved_sections_preview(chunks: list, *, limit: int = 8) -> str:
+    parts: list[str] = []
+    for chunk in chunks[:limit]:
+        sec = (getattr(chunk, "section_number", None) or "?").strip()
+        parts.append(sec)
+    extra = len(chunks) - limit
+    if extra > 0:
+        parts.append(f"+{extra}")
+    return ", ".join(parts) if parts else "—"
+
+
 def retrieve_chunks(state: AgentState) -> AgentState:
     if state.get("error"):
         return state
 
     business_type = state["business_type"]
+    object_tier = state.get("object_tier") or tier_for_object(business_type)
     chunks_a = _retrieve_for_region(business_type, state["region_a"])
-    logger.info(f"регион A ({state['region_a']}): найдено {len(chunks_a)} чанков")
+    logger.info(
+        f"retrieved_a region={state['region_a']} type={business_type!r} "
+        f"tier={object_tier} n={len(chunks_a)} sections=[{_retrieved_sections_preview(chunks_a)}]"
+    )
 
     chunks_federal = _retrieve_for_region(
         business_type, FEDERAL_CODE, max_chunks=MAX_FEDERAL_CHUNKS
     )
-    logger.info(f"федеральный уровень: найдено {len(chunks_federal)} чанков")
+    logger.info(
+        f"retrieved_federal type={business_type!r} tier={object_tier} "
+        f"n={len(chunks_federal)} sections=[{_retrieved_sections_preview(chunks_federal)}]"
+    )
 
     # отбрасываем табличный мусор перед LLM; если нечего опереться — честный отказ
     chunks_a = _filter_usable_chunks(chunks_a)
@@ -637,7 +655,11 @@ def retrieve_chunks(state: AgentState) -> AgentState:
 
     if state.get("mode") == "compare" and state.get("region_b"):
         chunks_b = _filter_usable_chunks(_retrieve_for_region(business_type, state["region_b"]))
-        logger.info(f"регион B ({state['region_b']}): найдено {len(chunks_b)} чанков")
+        logger.info(
+            f"retrieved_b region={state['region_b']} type={business_type!r} "
+            f"tier={object_tier} n={len(chunks_b)} "
+            f"sections=[{_retrieved_sections_preview(chunks_b)}]"
+        )
         new_state["retrieved_b"] = chunks_b
     else:
         chunks_b = []
@@ -750,6 +772,44 @@ def classify_requirements(state: AgentState) -> AgentState:
     return new_state
 
 
+def _complete_json_with_retry(
+    provider,
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    schema,
+    label: str,
+    attempts: int = 2,
+):
+    """complete + parse; при LLMParsingError — один повтор, иначе мягкий отказ выше."""
+    last_exc: Exception | None = None
+    raw_answer = ""
+    for attempt in range(1, attempts + 1):
+        try:
+            raw_answer = provider.complete(
+                system_prompt,
+                user_prompt,
+                max_tokens=DEFAULT_MAX_TOKENS,
+                temperature=0.0,
+            )
+            logger.debug(f"сырой ответ LLM ({label}, attempt={attempt}): {raw_answer}")
+            return parse_json_response(raw_answer, schema), None
+        except LLMParsingError as exc:
+            last_exc = exc
+            logger.warning(
+                f"LLMParsingError {label} attempt={attempt}: {exc}; "
+                f"raw[:1200]={raw_answer[:1200]}"
+            )
+            if attempt >= attempts:
+                break
+        except LLMProviderError as exc:
+            last_exc = exc
+            logger.error(f"не удалось получить {label} от LLM: {exc}")
+            break
+    logger.error(f"не удалось получить {label} от LLM: {last_exc}")
+    return None, last_exc
+
+
 def llm_compare_or_extract(state: AgentState) -> AgentState:
     if state.get("error"):
         return state
@@ -771,22 +831,17 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
             state.get("retrieved_federal", []),
             object_tier=object_tier,
         )
-        try:
-            raw_answer = provider.complete(
-                extraction_system_prompt(object_tier),
-                prompt,
-                max_tokens=DEFAULT_MAX_TOKENS,
-                temperature=0.0,
-            )
-            logger.debug(f"сырой ответ LLM (extraction): {raw_answer}")
-            extraction = parse_json_response(raw_answer, ExtractionResult)
-        except (LLMProviderError, LLMParsingError) as exc:
-            logger.error(f"не удалось получить extraction от LLM: {exc}")
-            if isinstance(exc, LLMParsingError):
-                logger.warning(f"сырой ответ LLM (extraction, parse fail): {str(exc)[:800]}")
+        extraction, extract_error = _complete_json_with_retry(
+            provider,
+            system_prompt=extraction_system_prompt(object_tier),
+            user_prompt=prompt,
+            schema=ExtractionResult,
+            label="extraction",
+        )
+        if extraction is None:
             return {
                 **state,
-                "error": friendly_llm_failure(exc, mode="info"),
+                "error": friendly_llm_failure(extract_error or RuntimeError("LLM"), mode="info"),
             }
         # коды/тип берём из запроса, не из ответа модели
         allowed_chunks = list(state.get("retrieved_a", [])) + list(state.get("retrieved_federal", []))
@@ -812,22 +867,17 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         state.get("retrieved_federal", []),
         object_tier=object_tier,
     )
-    try:
-        raw_answer = provider.complete(
-            comparison_system_prompt(object_tier),
-            prompt,
-            max_tokens=DEFAULT_MAX_TOKENS,
-            temperature=0.0,
-        )
-        logger.debug(f"сырой ответ LLM (compare): {raw_answer}")
-        comparison = parse_json_response(raw_answer, ComparisonResult)
-    except (LLMProviderError, LLMParsingError) as exc:
-        logger.error(f"не удалось получить comparison от LLM: {exc}")
-        if isinstance(exc, LLMParsingError):
-            logger.warning(f"сырой ответ LLM (compare, parse fail): {str(exc)[:800]}")
+    comparison, compare_error = _complete_json_with_retry(
+        provider,
+        system_prompt=comparison_system_prompt(object_tier),
+        user_prompt=prompt,
+        schema=ComparisonResult,
+        label="compare",
+    )
+    if comparison is None:
         return {
             **state,
-            "error": friendly_llm_failure(exc, mode="compare"),
+            "error": friendly_llm_failure(compare_error or RuntimeError("LLM"), mode="compare"),
         }
 
     region_a = get_region(state["region_a"])

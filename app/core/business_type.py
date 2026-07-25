@@ -16,6 +16,9 @@ _TYPO_ALIASES: dict[str, str] = {
     "медицинскй центр": "медицинский центр",
     "автомойкка": "автомойка",
     "автосервисз": "автосервис",
+    "автоцентр": "автосалон",
+    "дилерский центр": "автосалон",
+    "дилерский": "автосалон",
     "мкд": "многоквартирный дом",
     "жк": "многоквартирный дом",
     "доу": "детский сад",
@@ -59,6 +62,7 @@ FORBIDDEN_WORDS: tuple[str, ...] = (
 KNOWN_BUSINESS_TYPES: tuple[str, ...] = (
     "автомойка",
     "автосервис",
+    "автосалон",
     "автостоянка",
     "парковка",
     "стоянка",
@@ -174,6 +178,7 @@ def resolve_business_type(value: str) -> str:
 _BUSINESS_TYPE_STEMS: dict[str, tuple[str, ...]] = {
     "автомойка": ("автомойк", "автомоек", "моечн", "мойк"),
     "автосервис": ("автосервис", "техобслуживан", "технического обслуживания", "ремонту автомобилей"),
+    "автосалон": ("автосалон", "автоцентр", "дилерск", "дилерский центр"),
     "азс": ("азс", "автозаправ", "бензоколон", "заправочн", "заправк"),
     "автозаправка": ("азс", "автозаправ", "бензоколон"),
     "склад": ("склад", "база хранения"),
@@ -217,6 +222,15 @@ _BUSINESS_TYPE_STEMS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _type_token_in_text(haystack: str, needle: str) -> bool:
+    """Подстрока типа; короткие однословные — по границам слова («салон» ≠ «автосалон»)."""
+    if not needle or needle not in haystack:
+        return False
+    if " " in needle or len(needle) >= 7:
+        return True
+    return bool(re.search(rf"(?<![а-яёa-z]){re.escape(needle)}(?![а-яёa-z])", haystack))
+
+
 def extract_known_business_type(text: str) -> str | None:
     """Достаёт известный тип из длинной фразы, в т.ч. в падежах («автомойки»)."""
     lower = (text or "").strip().lower().strip("«»\"'.")
@@ -226,9 +240,9 @@ def extract_known_business_type(text: str) -> str | None:
     if lower in _TYPO_ALIASES:
         return _TYPO_ALIASES[lower]
 
-    # сначала длинные названия, чтобы «медицинский центр» победил «центр»
+    # сначала длинные названия, чтобы «автосалон» победил «салон», «медицинский центр» — «центр»
     for known in sorted(KNOWN_BUSINESS_TYPES, key=len, reverse=True):
-        if known in lower:
+        if _type_token_in_text(lower, known):
             return known
 
     for known, stems in _BUSINESS_TYPE_STEMS.items():
@@ -242,7 +256,7 @@ def extract_known_business_type(text: str) -> str | None:
 
     for known in sorted(KNOWN_BUSINESS_TYPES, key=len, reverse=True):
         stem = known[:-1] if len(known) > 5 and known[-1] in "аяыи" else known
-        if len(stem) >= 5 and stem in lower:
+        if len(stem) >= 5 and _type_token_in_text(lower, stem):
             return known
     return None
 

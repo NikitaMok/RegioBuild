@@ -21,6 +21,7 @@ def test_tier_group1_profile_objects() -> None:
 def test_tier_group2_frame_objects() -> None:
     assert tier_for_object("автомойка") == "group2"
     assert tier_for_object("торговый центр") == "group2"
+    assert tier_for_object("автосалон") == "group2"
     assert tier_for_object("гостиница") == "group2"
     assert tier_for_object("склад") == "group2"
     assert tier_for_object("медицинский центр") == "group2"
@@ -37,3 +38,10 @@ def test_group2_query_phrases_keep_parking_sanitary() -> None:
     phrases = " ".join(query_phrases_for_object("автомойка")).lower()
     assert "парков" in phrases or "машино" in phrases
     assert "санитар" in phrases or "санпин" in phrases
+
+
+def test_autosalon_query_phrases_like_trade() -> None:
+    phrases = " ".join(query_phrases_for_object("автосалон")).lower()
+    assert "парков" in phrases or "машино" in phrases
+    assert "санитар" in phrases or "санпин" in phrases
+    assert "эвакуац" in phrases or "пожар" in phrases

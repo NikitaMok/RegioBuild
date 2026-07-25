@@ -76,24 +76,53 @@ def _candidate_payloads(raw_text: str) -> list[str]:
     return expanded
 
 
+def _drop_incomplete_list_items(data: object) -> object:
+    """Убирает элементы списков без обязательных текстовых полей (обрыв генерации)."""
+    if not isinstance(data, dict):
+        return data
+    cleaned = dict(data)
+    for key, required in (
+        ("items", ("category", "description")),
+        ("common_requirements", ("category", "description")),
+        ("differences", ("category", "region_a_value", "region_b_value", "summary")),
+    ):
+        raw_list = cleaned.get(key)
+        if not isinstance(raw_list, list):
+            continue
+        kept: list[object] = []
+        for item in raw_list:
+            if not isinstance(item, dict):
+                continue
+            if all(str(item.get(field) or "").strip() for field in required):
+                kept.append(item)
+        cleaned[key] = kept
+    return cleaned
+
+
 def parse_json_response(raw_text: str, schema: type[ModelT]) -> ModelT:
     """Парсит JSON из ответа модели (fence, преамбула, мелкие глюки GigaChat)."""
     if not (raw_text or "").strip():
         raise LLMParsingError("пустой ответ модели")
 
     last_json_error: Exception | None = None
+    last_validation_error: Exception | None = None
     for candidate in _candidate_payloads(raw_text):
         try:
             data = json.loads(candidate)
         except json.JSONDecodeError as exc:
             last_json_error = exc
             continue
-        try:
-            return schema.model_validate(data)
-        except ValidationError as exc:
-            raise LLMParsingError(
-                f"ответ модели не соответствует схеме: {exc}\n{raw_text[:500]}"
-            ) from exc
+        for payload in (data, _drop_incomplete_list_items(data)):
+            try:
+                return schema.model_validate(payload)
+            except ValidationError as exc:
+                last_validation_error = exc
+                continue
+
+    if last_validation_error is not None:
+        raise LLMParsingError(
+            f"ответ модели не соответствует схеме: {last_validation_error}\n{raw_text[:500]}"
+        ) from last_validation_error
 
     detail = f"{last_json_error}" if last_json_error else "не найден JSON-объект"
     raise LLMParsingError(f"ответ модели не JSON: {detail}\n{raw_text[:500]}")

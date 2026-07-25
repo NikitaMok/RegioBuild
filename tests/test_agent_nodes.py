@@ -163,6 +163,22 @@ def test_extract_residential_and_preschool_types() -> None:
     ) == "детский сад"
 
 
+def test_extract_autosalon_not_beauty_salon() -> None:
+    from app.core.business_type import extract_known_business_type, resolve_business_type
+
+    assert (
+        extract_known_business_type(
+            "Какие требования к автосалону в Республике Татарстан?"
+        )
+        == "автосалон"
+    )
+    assert extract_known_business_type("автосалон") == "автосалон"
+    assert resolve_business_type("автоцентр") == "автосалон"
+    assert resolve_business_type("дилерский центр") == "автосалон"
+    assert extract_known_business_type("салон красоты") == "салон красоты"
+    assert extract_known_business_type("салон") == "салон"
+
+
 def test_normalize_citation_keeps_first_of_joined_list() -> None:
     assert nodes._normalize_citation("п. 7.1.4, п. 4.1, п. 3.1") == "7.1.4"
     assert nodes._normalize_citation("ст. 69, ст. 82") == "69"

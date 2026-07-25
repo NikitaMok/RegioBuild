@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from app.llm.prompts import build_comparison_prompt, build_extraction_prompt
+from app.llm.prompts import (
+    build_comparison_prompt,
+    build_extraction_prompt,
+    extraction_system_prompt,
+)
 from app.vectorstore.types import RetrievedChunk
 
 
@@ -71,3 +75,10 @@ def test_format_chunks_keeps_longer_budget_for_tables() -> None:
     )
     assert "табл.108" in formatted
     assert len(formatted) > 600
+
+
+def test_group2_extraction_prompt_requires_numbers_from_chunks() -> None:
+    prompt = extraction_system_prompt("group2")
+    assert "автосалон" in prompt
+    assert "ОБЯЗАТЕЛЬНО" in prompt
+    assert "машино-места" in prompt or "числ" in prompt.lower()
