@@ -1,13 +1,3 @@
-"""Smoke-проверки прод-API.
-
-Примеры:
-  python -m scripts.smoke_wave1_prod --api-url https://api.example.com
-  python -m scripts.smoke_wave1_prod --api-url https://api.example.com --full
-
-Без --full: только /health.
-С --full: info-запросы (тратит токены GigaChat).
-"""
-
 from __future__ import annotations
 
 import argparse

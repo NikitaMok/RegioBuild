@@ -68,6 +68,7 @@ docker-compose.prom-override.yml
 
 # локальные утилиты сборки скринов README — не в git
 scripts/_prepare_readme_shots.py
+scripts/_norm_readme_shots.py
 docs/screenshots/_audit/
 
 # отчёты eval — артефакты прогонов; golden.jsonl остаётся в git

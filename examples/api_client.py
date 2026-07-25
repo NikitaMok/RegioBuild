@@ -1,9 +1,3 @@
-"""Минимальный клиент RegioBuild API v1.
-
-Использование:
-  python examples/api_client.py --api-url https://<host> --api-key rgb_…
-"""
-
 from __future__ import annotations
 
 import argparse

@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="docs/screenshots/banner.png" alt="RegioBuild" width="720"/>
-</p>
-
-# RegioBuild
+<img src="docs/screenshots/banner.png" alt="RegioBuild" width="100%">
 
 [Русская версия (основная)](README.md)
 
@@ -42,39 +38,44 @@ Details: [`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
 
 ## Welcome interface
 
-<p align="center">
-  <img src="docs/screenshots/01-bot-start.png" alt="Bot start" width="360"/>
-  &nbsp;
-  <img src="docs/screenshots/02-bot-must-read.png" alt="Required reading" width="360"/>
-</p>
+<table width="100%">
+  <tr>
+    <td width="50%"><img src="docs/screenshots/01-bot-start.png" alt="Bot start" width="100%"></td>
+    <td width="50%"><img src="docs/screenshots/02-bot-must-read.png" alt="Required reading" width="100%"></td>
+  </tr>
+</table>
 
 ---
 
 ## Query examples
 
-<p align="center">
-  <img src="docs/screenshots/03-compare-hotel-1.png" alt="Hotel compare, part 1" width="360"/>
-  &nbsp;
-  <img src="docs/screenshots/04-compare-hotel-2.png" alt="Hotel compare, part 2" width="360"/>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/05-compare-hotel-3.png" alt="Hotel compare, part 3" width="360"/>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/06-info-carwash-1.png" alt="Car wash in Sverdlovsk Oblast" width="360"/>
-  &nbsp;
-  <img src="docs/screenshots/07-info-carwash-2.png" alt="Federal block and disclaimer" width="360"/>
-</p>
+<table width="100%">
+  <tr>
+    <td width="50%"><img src="docs/screenshots/03-compare-hotel-1.png" alt="Hotel compare, part 1" width="100%"></td>
+    <td width="50%"><img src="docs/screenshots/04-compare-hotel-2.png" alt="Hotel compare, part 2" width="100%"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="docs/screenshots/05-compare-hotel-3.png" alt="Hotel compare, part 3" width="50%">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/06-info-carwash-1.png" alt="Car wash in Sverdlovsk Oblast" width="100%"></td>
+    <td width="50%"><img src="docs/screenshots/07-info-carwash-2.png" alt="Federal block and disclaimer" width="100%"></td>
+  </tr>
+</table>
 
 ---
 
 ## Feedback interface
 
-<p align="center">
-  <img src="docs/screenshots/08-feedback.gif" alt="In-bot feedback" width="420"/>
-</p>
+<table width="100%">
+  <tr>
+    <td width="25%"></td>
+    <td width="50%"><img src="docs/screenshots/08-feedback.gif" alt="In-bot feedback" width="100%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ---
 
@@ -156,29 +157,17 @@ Grafana Cloud (remote_write), Alertmanager, weekly backups. Deploy path:
 GitHub Actions → SSH → `scripts/deploy_remote.sh` + `scripts/verify_deploy.sh`
 (`verify OK`).
 
-<p align="center">
-  <img src="docs/screenshots/11-prometheus-targets.png" alt="Prometheus Targets" width="720"/>
-</p>
+<img src="docs/screenshots/11-prometheus-targets.png" alt="Prometheus Targets" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/12-prometheus-graph.png" alt="Prometheus Graph" width="720"/>
-</p>
+<img src="docs/screenshots/12-prometheus-graph.png" alt="Prometheus Graph" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/13-grafana-explore.png" alt="Grafana Cloud Explore" width="720"/>
-</p>
+<img src="docs/screenshots/13-grafana-explore.png" alt="Grafana Cloud Explore" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/14-github-actions.png" alt="GitHub Actions" width="640"/>
-</p>
+<img src="docs/screenshots/14-github-actions.png" alt="GitHub Actions" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/10-aeza-stats.png" alt="Aeza VPS load" width="720"/>
-</p>
+<img src="docs/screenshots/10-aeza-stats.png" alt="Aeza VPS load" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/09-gigachat-usage.png" alt="GigaChat Ultra usage" width="480"/>
-</p>
+<img src="docs/screenshots/09-gigachat-usage.png" alt="GigaChat Ultra usage" width="100%">
 
 ---
 

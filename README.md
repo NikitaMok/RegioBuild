@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="docs/screenshots/banner.png" alt="RegioBuild" width="720"/>
-</p>
-
-# RegioBuild
+<img src="docs/screenshots/banner.png" alt="RegioBuild" width="100%">
 
 [English version](README_EN.md)
 
@@ -44,39 +40,44 @@ HTTP API (`/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`).
 
 ## Приветственный интерфейс
 
-<p align="center">
-  <img src="docs/screenshots/01-bot-start.png" alt="Старт бота" width="360"/>
-  &nbsp;
-  <img src="docs/screenshots/02-bot-must-read.png" alt="Обязательно к прочтению" width="360"/>
-</p>
+<table width="100%">
+  <tr>
+    <td width="50%"><img src="docs/screenshots/01-bot-start.png" alt="Старт бота" width="100%"></td>
+    <td width="50%"><img src="docs/screenshots/02-bot-must-read.png" alt="Обязательно к прочтению" width="100%"></td>
+  </tr>
+</table>
 
 ---
 
 ## Примеры запросов
 
-<p align="center">
-  <img src="docs/screenshots/03-compare-hotel-1.png" alt="Сравнение: гостиница, часть 1" width="360"/>
-  &nbsp;
-  <img src="docs/screenshots/04-compare-hotel-2.png" alt="Сравнение: гостиница, часть 2" width="360"/>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/05-compare-hotel-3.png" alt="Сравнение: гостиница, часть 3" width="360"/>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/06-info-carwash-1.png" alt="Автомойка в Свердловской области" width="360"/>
-  &nbsp;
-  <img src="docs/screenshots/07-info-carwash-2.png" alt="Федеральный блок и дисклеймер" width="360"/>
-</p>
+<table width="100%">
+  <tr>
+    <td width="50%"><img src="docs/screenshots/03-compare-hotel-1.png" alt="Сравнение: гостиница, часть 1" width="100%"></td>
+    <td width="50%"><img src="docs/screenshots/04-compare-hotel-2.png" alt="Сравнение: гостиница, часть 2" width="100%"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="docs/screenshots/05-compare-hotel-3.png" alt="Сравнение: гостиница, часть 3" width="50%">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/06-info-carwash-1.png" alt="Автомойка в Свердловской области" width="100%"></td>
+    <td width="50%"><img src="docs/screenshots/07-info-carwash-2.png" alt="Федеральный блок и дисклеймер" width="100%"></td>
+  </tr>
+</table>
 
 ---
 
 ## Интерфейс обратной связи
 
-<p align="center">
-  <img src="docs/screenshots/08-feedback.gif" alt="Обратная связь в боте" width="420"/>
-</p>
+<table width="100%">
+  <tr>
+    <td width="25%"></td>
+    <td width="50%"><img src="docs/screenshots/08-feedback.gif" alt="Обратная связь в боте" width="100%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
 
 ---
 
@@ -155,29 +156,17 @@ curl -X POST https://<host>/api/v1/info \
 (remote_write), Alertmanager, еженедельный бэкап. Выкладка — GitHub Actions →
 SSH → `scripts/deploy_remote.sh` + `scripts/verify_deploy.sh` (`verify OK`).
 
-<p align="center">
-  <img src="docs/screenshots/11-prometheus-targets.png" alt="Prometheus Targets" width="720"/>
-</p>
+<img src="docs/screenshots/11-prometheus-targets.png" alt="Prometheus Targets" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/12-prometheus-graph.png" alt="Prometheus Graph" width="720"/>
-</p>
+<img src="docs/screenshots/12-prometheus-graph.png" alt="Prometheus Graph" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/13-grafana-explore.png" alt="Grafana Cloud Explore" width="720"/>
-</p>
+<img src="docs/screenshots/13-grafana-explore.png" alt="Grafana Cloud Explore" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/14-github-actions.png" alt="GitHub Actions" width="640"/>
-</p>
+<img src="docs/screenshots/14-github-actions.png" alt="GitHub Actions" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/10-aeza-stats.png" alt="Нагрузка VPS Aeza" width="720"/>
-</p>
+<img src="docs/screenshots/10-aeza-stats.png" alt="Нагрузка VPS Aeza" width="100%">
 
-<p align="center">
-  <img src="docs/screenshots/09-gigachat-usage.png" alt="Использование GigaChat Ultra" width="480"/>
-</p>
+<img src="docs/screenshots/09-gigachat-usage.png" alt="Использование GigaChat Ultra" width="100%">
 
 ---
 

@@ -17,9 +17,9 @@ construction objects.
 Answers do not replace design documentation and/or a lawyer’s opinion, nor an
 independent check that norms are current at the time of the request. The user
 must independently verify cited clauses against the official source and is
-responsible for decisions made on the basis of reference answers. The developer
-is not liable for losses arising from use of the answers without professional
-verification.
+responsible for decisions made on the basis of reference answers. The creator
+of this project is not liable for losses arising from use of the answers
+without professional verification.
 
 Municipal land-use rules (PZZ) are not included in the index and must still be
 verified separately. Local NGP and other acts outside the index may impose
