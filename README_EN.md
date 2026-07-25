@@ -1,199 +1,95 @@
+<p align="center">
+  <img src="docs/screenshots/banner.png" alt="RegioBuild" width="720"/>
+</p>
+
 # RegioBuild
 
 [Русская версия (основная)](README.md)
 
+[![CI](https://github.com/NikitaMok/RegioBuild/actions/workflows/ci.yml/badge.svg)](https://github.com/NikitaMok/RegioBuild/actions/workflows/ci.yml)
+[![Deploy](https://github.com/NikitaMok/RegioBuild/actions/workflows/deploy.yml/badge.svg)](https://github.com/NikitaMok/RegioBuild/actions/workflows/deploy.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+
 Differences in regional urban-planning design standards across the Russian
-Federation are a well-known problem that is almost impossible to close by hand.
-Each constituent entity has its own requirements, act structure, and density of
-regulation. Federal norms set a baseline, but regional specifics can change
-everything.
+Federation are hard to close by hand: each constituent entity of the Russian
+Federation has its own act structure, density of regulation, and tables.
+Federal norms set a baseline, but regional specifics often impose their own
+requirements.
 
-I know this from legal practice. Manual comparison takes hours even for an
-experienced lawyer — and when it feels complete, something material is often
-still missing.
+I know this problem space from a varied legal background. Even for an
+experienced lawyer, comparing regional requirements between two constituent
+entities of the Russian Federation for a single object type can take hours —
+and that still does not guarantee complete accuracy, because a material clause
+is easy to miss.
 
-**RegioBuild** is an engineering answer to that problem.
+**RegioBuild** builds a structured list of requirements for a capital
+construction object in a chosen constituent entity of the Russian Federation by
+analysing RNGP/TSN and the applicable federal layer, and compares requirements
+across two entities when needed.
 
-<p align="center">
-  <img src="docs/screenshots/01-bot-about.png" alt="RegioBuild — Telegram overview" width="400"/>
-</p>
+Telegram is only a demonstration channel here. The product core is an HTTP API
+(`/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`). External systems
+integrate independently of the messenger.
+
+**Terms of use.** RegioBuild is a reference tool, not legal advice. The answers
+do not replace design documentation and/or a lawyer’s opinion, nor an
+independent check that norms are current at the time of the request. Municipal
+land-use rules (PZZ) are not included in the index, so they must still be
+verified separately.
+Details: [`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
 
 ---
 
-## What it is
-
-A service for analysing regional urban-planning design standards (RNGP/TSN)
-against the federal layer. Given an object type and a region — or two regions
-for comparison — it returns a structured overview tied to normative clauses,
-with regional and federal levels kept distinct.
-
-Telegram is a demonstration channel at this stage. The core is an **HTTP API**
-(`/info`, `/compare`, `/api/v1/*`, `/health`, `/metrics`) that external systems
-can call independently of the messenger.
-
----
-
-## How it works
-
-### Ingestion
-
-Regional acts arrive as PDF, HTML, DOCX, and noisy tables with false numbering.
-A hierarchical parser extracts structured requirements; heuristics strip noise
-before indexing. Skip that, and “clause 1” from a table caption lands in the
-vector store — and retrieval feeds the model garbage.
-
-Corpus manifest and ISO region codes live in `config/documents.yaml` and
-`config/regions.yaml`. Municipal zoning (PZZ) is out of the current index.
-
-### Retrieval
-
-A user types “car wash”. The norms may say “car-wash bay”, “vehicle washing
-facility”, or bury the rule in a table. Single-shot semantic search is not
-enough.
-
-The pipeline normalizes the object type, expands the query, and retrieves
-hybrid-style: dense (Qdrant + fastembed/ONNX in production) plus BM25 over
-candidates. Ranking prefers curated fragments and precise clause numbers. The
-federal layer (`RU-FED`) is mixed in explicitly, without replacing the regional
-act.
-
-A TF-IDF + LogisticRegression classifier routes requirements into commercial
-answer categories (holdout accuracy on the order of 88%).
-
-### Grounding
-
-The costliest failure mode in LegalTech is a confident invented clause number.
-Here it is blocked in code: every clause the model proposes is checked against
-retrieved fragments. No match — no clause in the answer. Empty retrieval —
-explicit refusal, no fabricated norm. A numeric guardrail additionally checks
-figures in the answer text.
-
-### LangGraph agent
-
-Nodes drive the flow end-to-end:
-
-1. object-type normalization  
-2. query understanding and mode (overview / compare)  
-3. query transform  
-4. retrieval  
-5. requirement classification and rerank  
-6. grounded generation and formatting  
-
-The LLM sits behind a provider abstraction: **GigaChat Ultra** (`GigaChat-3-Ultra`
-via `api.giga.chat`) in production; YandexGPT is in the codebase with failover
-off by default — no agent rewrite to switch.
-
-### Production
-
-Production runs on an **Aeza VPS** (Moscow): nginx, API, Telegram bot,
-Prometheus/Alertmanager, weekly backups. FastAPI + aiogram 3 + Docker; one image,
-process role via `SERVICE_ROLE=api|bot`. Vectors on Qdrant Cloud; embeddings use
-ONNX (fastembed), without PyTorch in the runtime. Disk LLM cache avoids paying
-twice for the same request.
-
-### Observability
-
-A commercial contour needs visibility, not only answers:
-
-- Prometheus metrics on `GET /metrics` (including
-  `regiobuild_guardrail_blocks_total`, latency and HTTP errors via the
-  instrumentator)
-- Sentry via `SENTRY_DSN`
-
-Production runs on an Aeza VPS: nginx, API, Telegram bot,
-Prometheus/Alertmanager, SSH deploy (`docker-compose.prod.yml`,
-`scripts/deploy_remote.sh`).
-
-### Quality
-
-Hit rate = share of cases where at least one expected `section_number` appears in
-the agent's retrieval context (`python -m scripts.eval_golden`, retrieval mode).
-This is **not** “legally correct answer” and not a building permit — only an
-anchor-retrieval metric. Disclaimer:
-[`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
-
-Targets: **100** cases in `data/eval/golden.jsonl`, hit rate **≥ 95%** (aim 99%).
-`eval_golden` retrieval threshold: 0.95.
-
-LLM: `temperature=0.0` on all calls (normalization, extraction, compare) for
-deterministic NPA answers.
-
-Current retrieval runs (`fastembed` + Qdrant, full corpus; no curated-anchor
-injection into context and no curated-only search):
-
-| Set | Hit rate | Role |
-|-----|----------|------|
-| `data/eval/golden.jsonl` | **100/100** | diagnostic anchors |
-| `data/eval/blind_paraphrase.jsonl` | **60/60** | blind lawyer/builder paraphrases in pilot scope |
-
-Blind ≥ 90% is the robustness target in scope; golden alone is not “ready for demo”.
-Safety: citation grounding + numeric guardrail; weak/empty support → refusal.
-Not claimed: site-level legal correctness of answers. Possible future commercial
-upgrade: human-in-the-loop verification / deeper answer-eval (outside the
-current readiness criteria).
-
-Blind run:
-`python -m scripts.eval_golden --golden data/eval/blind_paraphrase.jsonl`
-
-Pytest in CI (light suite without torch). Post-deploy smoke checks that the
-contour is alive.
-
-Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+## Welcome interface
 
 <p align="center">
-  <img src="docs/screenshots/02-bot-start.png" alt="Bot start" width="360"/>
+  <img src="docs/screenshots/01-bot-start.png" alt="Bot start" width="360"/>
   &nbsp;
-  <img src="docs/screenshots/03-bot-rules.png" alt="Usage limitations" width="360"/>
+  <img src="docs/screenshots/02-bot-must-read.png" alt="Required reading" width="360"/>
 </p>
 
 ---
 
-## Modes
-
-1. **Single-region overview** — regional and federal requirements for an object.  
-2. **Two-region comparison** — differences and overlaps with clause citations.
+## Query examples
 
 <p align="center">
-  <img src="docs/screenshots/04-bot-modes.png" alt="Mode selection" width="360"/>
+  <img src="docs/screenshots/03-compare-hotel-1.png" alt="Hotel compare, part 1" width="360"/>
+  &nbsp;
+  <img src="docs/screenshots/04-compare-hotel-2.png" alt="Hotel compare, part 2" width="360"/>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/05-bot-info-avtomoika-kk.png" alt="Car wash in Krasnodar Krai" width="400"/>
+  <img src="docs/screenshots/05-compare-hotel-3.png" alt="Hotel compare, part 3" width="360"/>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/06-bot-compare-sklad-rt-mo.png" alt="Warehouse compare: Tatarstan vs Moscow Oblast" width="400"/>
+  <img src="docs/screenshots/06-info-carwash-1.png" alt="Car wash in Sverdlovsk Oblast" width="360"/>
+  &nbsp;
+  <img src="docs/screenshots/07-info-carwash-2.png" alt="Federal block and disclaimer" width="360"/>
 </p>
 
 ---
 
-## Integration (API v1)
+## Feedback interface
 
-The commercial surface is `/api/v1` with `X-API-Key` authentication and a
-machine-readable response: every requirement is tied to a clause, a regulatory
-level (regional/federal) and the source-verification date. Interactive spec —
-`GET /docs` (OpenAPI).
-
-```bash
-# issue a client key (server side)
-python -m scripts.manage_api_keys create --name "Client LLC" --daily-limit 200
-
-curl -X POST https://<host>/api/v1/info \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: rgb_…" \
-  -d '{"region": "RU-KDA", "object_type": "автомойка"}'
-```
-
-`/api/v1/compare` additionally returns `differences` (per-region values with
-separate citations) and `common_requirements`. Client example —
-[`examples/api_client.py`](examples/api_client.py).
-
-Scaling to new regions is a data-and-config procedure, no code changes:
-[`docs/ADDING_REGION.md`](docs/ADDING_REGION.md).
+<p align="center">
+  <img src="docs/screenshots/08-feedback.gif" alt="In-bot feedback" width="420"/>
+</p>
 
 ---
 
-## Corpus coverage
+## Operating modes
+
+1. **Requirements overview for a chosen constituent entity of the Russian
+   Federation** — regional and federal requirements for the object, with clause
+   citations.
+2. **Comparison of requirements between two constituent entities of the Russian
+   Federation** — differences and overlaps in regional and federal requirements
+   for the object, with clause citations.
+
+---
+
+## Regulatory corpus
 
 | ISO 3166-2 | Entity |
 |------------|--------|
@@ -202,38 +98,91 @@ Scaling to new regions is a data-and-config procedure, no code changes:
 | `RU-SVE` | Sverdlovsk Oblast |
 | `RU-NVS` | Novosibirsk Oblast |
 | `RU-TA` | Republic of Tatarstan |
-| `RU-FED` | Federal layer: Urban Planning Code, SP 42, 123-FZ, SanPiN (full PDF parse in index) |
+| `RU-FED` | Federal layer: Urban Planning Code, SP 42, 123-FZ, SanPiN |
 
-The index is limited to this corpus and does not claim full coverage of all
-Russian codes of practice or the full object classifier. Local zoning (PZZ) /
-municipal level are out of scope.
-
----
-
-## Status
-
-**Working prototype.** Full loop: ingestion → index → agent → API → Telegram.
-
-**Done**
-
-- citation grounding and numeric guardrail  
-- hybrid retrieval, Qdrant, ISO regions  
-- requirement-category classifier  
-- Docker, CI, Prometheus metrics, Grafana Cloud contour, tests, smoke  
-- production on Aeza VPS (nginx, backups, monitoring)  
-- API-first surface alongside the Telegram demo  
-
-**Next**
-
-- broader coverage (regions, municipal layer)  
-- robustness on atypical phrasings  
-- corpus refresh when norms change  
-- lower answer latency (cache, profiling)  
-- full scrape / remote write of metrics into Grafana Cloud in production  
+The index is limited to this corpus. Local zoning (PZZ) / municipal level are
+out of scope. Adding a region is a config-and-data procedure:
+[`docs/ADDING_REGION_EN.md`](docs/ADDING_REGION_EN.md).
 
 ---
 
-## Stack
+## Solution architecture
+
+In short:
+
+1. **Ingestion** — PDF/HTML/DOCX → hierarchical parse → chunks in Qdrant.
+2. **Retrieval** — object-type normalization, multi-query, hybrid dense + BM25,
+   ranking that prefers reliable sections and curated anchors.
+3. **Grounding** — a model-proposed clause enters the answer only if it matches
+   retrieved fragments; weak support yields an explicit refusal.
+4. **Agent** — LangGraph: normalize → understand → retrieve → classify →
+   rerank → LLM → format/guardrail.
+5. **LLM** — GigaChat Ultra (`GigaChat-3-Ultra`), `temperature=0.0`.
+
+Details: [`docs/ARCHITECTURE_EN.md`](docs/ARCHITECTURE_EN.md).
+
+Retrieval evaluation (clause-anchor hit rate, not legal correctness):
+
+| Set | Hit rate |
+|-----|----------|
+| `data/eval/golden.jsonl` | 100/100 |
+| `data/eval/blind_paraphrase.jsonl` | 60/60 |
+
+---
+
+## Application programming interface (API)
+
+The commercial surface is `/api/v1` with `X-API-Key` authentication and
+machine-readable citations (document, clause, level, verification date).
+Interactive spec: `GET /docs`.
+
+```bash
+python -m scripts.manage_api_keys create --name "Client LLC" --daily-limit 200
+
+curl -X POST https://<host>/api/v1/info \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: rgb_…" \
+  -d '{"region": "RU-KDA", "object_type": "автомойка"}'
+```
+
+Client example: [`examples/api_client.py`](examples/api_client.py).
+
+---
+
+## Production environment and monitoring
+
+Production runs on an Aeza VPS (Moscow): nginx, API, Telegram bot, Prometheus,
+Grafana Cloud (remote_write), Alertmanager, weekly backups. Deploy path:
+GitHub Actions → SSH → `scripts/deploy_remote.sh` + `scripts/verify_deploy.sh`
+(`verify OK`).
+
+<p align="center">
+  <img src="docs/screenshots/11-prometheus-targets.png" alt="Prometheus Targets" width="720"/>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/12-prometheus-graph.png" alt="Prometheus Graph" width="720"/>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/13-grafana-explore.png" alt="Grafana Cloud Explore" width="720"/>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/14-github-actions.png" alt="GitHub Actions" width="640"/>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/10-aeza-stats.png" alt="Aeza VPS load" width="720"/>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/09-gigachat-usage.png" alt="GigaChat Ultra usage" width="480"/>
+</p>
+
+---
+
+## Technology stack
 
 | Layer | Components |
 |-------|------------|
@@ -241,17 +190,17 @@ municipal level are out of scope.
 | Backend | FastAPI |
 | Client | aiogram 3 |
 | Orchestration | LangGraph |
-| Embeddings | fastembed (ONNX); optional sentence-transformers |
-| Vector DB | Qdrant (primary); Chroma as local legacy |
+| Embeddings | fastembed (ONNX) |
+| Vector DB | Qdrant Cloud |
 | Classification | scikit-learn (TF-IDF + LogisticRegression) |
-| LLM | GigaChat Ultra (`GigaChat-3-Ultra`) |
+| LLM | GigaChat Ultra |
 | Data | SQLAlchemy, Alembic |
-| Observability | Prometheus `/metrics`, Grafana Cloud, Sentry |
+| Observability | Prometheus, Grafana Cloud, Sentry |
 | Infrastructure | Docker, GitHub Actions, Aeza VPS |
 
 ---
 
-## Repository and run
+## Local setup and development
 
 ```
 RegioBuild/
@@ -262,7 +211,6 @@ RegioBuild/
   scripts/
   tests/
   data/          # curated; raw/processed/structured — local
-  Dockerfile
 ```
 
 ```bash
@@ -272,9 +220,7 @@ pip install -r requirements.txt
 copy .env.example .env         # Linux/Mac: cp .env.example .env
 ```
 
-Configure GigaChat in `.env`, and optionally the bot token, Qdrant, and Grafana
-Cloud settings. For local Chroma:
-`pip install -r requirements-legacy-chroma.txt`.
+Configure GigaChat in `.env`, and optionally the bot token and Qdrant settings.
 
 ```bash
 alembic upgrade head
@@ -285,35 +231,22 @@ uvicorn app.api.main:app --reload
 python -m app.bot.main
 ```
 
-Or `docker compose up --build`. Production VPS:
-`docker compose -f docker-compose.prod.yml --env-file .env up -d --build`.
-Postgres: `docker-compose.postgres.yml`.
+Production: `docker compose -f docker-compose.prod.yml --env-file .env up -d --build`.
 
 ```bash
 pytest
-python -m app.eval.retrieval_eval
-python -m app.eval.answer_eval
+python -m scripts.eval_golden
 ```
 
-Post-deploy smoke: `python -m scripts.smoke_wave1_prod --api-url https://…`.
-
 ---
 
-## Usage limitations
+© Nikita Mokin / Никита Мокин  
+[GitHub](https://github.com/NikitaMok) ·
+[LinkedIn](https://ru.linkedin.com/in/mokinnikita)
 
-RegioBuild is a reference tool, not legal advice. Answers do not replace design
-documentation, counsel’s opinion, or a check that norms are current at decision
-time. Municipal PZZ acts are not in the index — verify them separately.
-
-Details: [`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
-
----
-
-© Nikita Mokin / Никита Мокин.  
-[GitHub](https://github.com/NikitaMok) · [LinkedIn](https://ru.linkedin.com/in/mokinnikita)
-
-All rights reserved. Copying the repository, reproducing material parts of the
-solution, and commercial use of the code or product without prior written
-consent of the rights holder are prohibited. Publication on GitHub is for review
-and demonstration of competence and does not grant a licence for commercial
-exploitation.
+All rights reserved.  
+Copying the repository, reproducing material parts of the solution, and
+commercial use of the code or product without prior written consent of the
+rights holder are prohibited.  
+Publication on GitHub is for demonstration of competence and does not grant a
+licence for commercial exploitation.

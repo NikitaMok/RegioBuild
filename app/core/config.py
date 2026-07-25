@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -29,12 +30,23 @@ class Settings(BaseSettings):
     qdrant_collection: str = "regiobuild_normative"
     qdrant_api_key: str = ""
 
-    # MiniLM — demo/Bothost; e5-large — enterprise
+    # MiniLM — standard (ONNX); e5-large — enterprise
     embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     embedding_model_enterprise: str = "intfloat/multilingual-e5-large"
-    deploy_profile: Literal["bothost-demo", "enterprise"] = "bothost-demo"
-    # пусто = auto: bothost-demo→fastembed, enterprise→sentence_transformers
+    deploy_profile: Literal["standard", "enterprise"] = "standard"
+    # пусто = auto: standard→fastembed, enterprise→sentence_transformers
     embedding_backend: str = ""
+
+    @field_validator("deploy_profile", mode="before")
+    @classmethod
+    def _normalize_deploy_profile(cls, value: object) -> object:
+        if value is None or value == "":
+            return "standard"
+        key = str(value).strip().lower()
+        # bothost-demo — устаревший алиас профиля (совместимость .env на VPS)
+        if key in {"bothost-demo", "demo", "standard"}:
+            return "standard"
+        return key
 
     # Grafana Cloud (remote_write) — секреты только в .env
     grafana_cloud_prometheus_url: str = ""

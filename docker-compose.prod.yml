@@ -43,7 +43,7 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-regiobuild_normative}
       EMBEDDING_BACKEND: fastembed
-      DEPLOY_PROFILE: bothost-demo
+      DEPLOY_PROFILE: ${DEPLOY_PROFILE:-standard}
       WARMUP_ON_START: ${WARMUP_ON_START:-off}
       API_AUTH_ENABLED: ${API_AUTH_ENABLED:-false}
       LLM_CACHE_ENABLED: ${LLM_CACHE_ENABLED:-true}
@@ -87,7 +87,7 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-regiobuild_normative}
       EMBEDDING_BACKEND: fastembed
-      DEPLOY_PROFILE: bothost-demo
+      DEPLOY_PROFILE: ${DEPLOY_PROFILE:-standard}
       WARMUP_ON_START: "off"
       API_AUTH_ENABLED: ${API_AUTH_ENABLED:-false}
       LLM_CACHE_ENABLED: ${LLM_CACHE_ENABLED:-true}
@@ -121,16 +121,20 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.1
     restart: unless-stopped
+    environment:
+      GRAFANA_CLOUD_PROMETHEUS_URL: ${GRAFANA_CLOUD_PROMETHEUS_URL:-}
+      GRAFANA_CLOUD_PROMETHEUS_USER: ${GRAFANA_CLOUD_PROMETHEUS_USER:-}
+      GRAFANA_CLOUD_PROMETHEUS_TOKEN: ${GRAFANA_CLOUD_PROMETHEUS_TOKEN:-}
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/prometheus.yml.template:/etc/prometheus/prometheus.yml.template:ro
+      - ./deploy/prometheus/docker-entrypoint.sh:/etc/prometheus/docker-entrypoint.sh:ro
       - ./deploy/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - prometheus_data:/prometheus
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.retention.time=30d
-      - --web.enable-lifecycle
-    expose:
-      - "9090"
+    entrypoint: ["/bin/sh", "/etc/prometheus/docker-entrypoint.sh"]
+    # UI только localhost (SSH-туннель); в интернет не открываем
+    ports:
+      - "127.0.0.1:9090:9090"
     depends_on:
       api:
         condition: service_healthy

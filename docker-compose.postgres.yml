@@ -1,4 +1,4 @@
-# Локальный Postgres вместо SQLite. Для прода не нужен — retrieval через Chroma.
+# Локальный Postgres вместо SQLite. Для прода на VPS не обязателен — там обычно SQLite + Qdrant Cloud.
 services:
   postgres:
     image: postgres:16-alpine

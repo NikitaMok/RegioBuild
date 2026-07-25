@@ -62,6 +62,14 @@ models/
 _gh_runs.json
 _info_resp.json
 
+# Prometheus runtime с секретами Grafana Cloud — только на сервере
+deploy/prometheus/prometheus.runtime.yml
+docker-compose.prom-override.yml
+
+# локальные утилиты сборки скринов README — не в git
+scripts/_prepare_readme_shots.py
+docs/screenshots/_audit/
+
 # отчёты eval — артефакты прогонов; golden.jsonl остаётся в git
 data/eval/last_run.json
 data/eval/last_blind.json

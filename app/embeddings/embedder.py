@@ -13,7 +13,7 @@ EmbeddingBackend = Literal["fastembed", "sentence_transformers"]
 
 
 def resolve_embedding_backend() -> EmbeddingBackend:
-    """bothost-demo → fastembed (ONNX, низкий RAM); enterprise по умолчанию — torch ST."""
+    """standard → fastembed (ONNX, низкий RAM); enterprise по умолчанию — torch ST."""
     settings = get_settings()
     explicit = (settings.embedding_backend or "").strip().lower()
     if explicit in {"fastembed", "sentence_transformers"}:
@@ -57,7 +57,7 @@ class Embedder:
     """Единый контракт encode_* для индексации и retrieval.
 
     Backend:
-    - fastembed — прод Bothost / demo (ONNX, без PyTorch в RAM)
+    - fastembed — прод / standard (ONNX, без PyTorch в RAM)
     - sentence_transformers — enterprise / локальные эксперименты (e5-large и т.п.)
     """
 

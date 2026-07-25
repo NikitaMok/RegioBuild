@@ -103,7 +103,7 @@ def _delayed_warmup() -> None:
 async def lifespan(_app: FastAPI):
     _configure_logging()
     _init_sentry()
-    # immediate при старте на Bothost часто ловит OOM → рестарт-цикл.
+    # immediate при старте на ограниченной RAM часто ловит OOM → рестарт-цикл.
     # delayed: сначала /health и прокси, через ~25 с модель уже в RAM до первого юзера.
     mode = _warmup_mode()
     if mode == "immediate":

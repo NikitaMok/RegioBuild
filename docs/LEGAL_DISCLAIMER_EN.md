@@ -2,8 +2,8 @@
 
 A reference service based on excerpts from regulatory acts of the Russian
 Federation (RNGP/TSN of the included regions, SP 42, excerpts from Federal Law
-No. 123-FZ and SanPiN) for questions about the placement of capital construction
-objects.
+No. 123-FZ and SanPiN) for questions about designing and placing capital
+construction objects.
 
 ## What this is not
 
@@ -14,13 +14,16 @@ objects.
 
 ## Liability
 
-The user must independently verify cited clauses against the official source
-and is responsible for decisions made on the basis of reference answers.
-The developer is not liable for losses arising from use of the answers without
-professional verification.
+Answers do not replace design documentation and/or a lawyer’s opinion, nor an
+independent check that norms are current at the time of the request. The user
+must independently verify cited clauses against the official source and is
+responsible for decisions made on the basis of reference answers. The developer
+is not liable for losses arising from use of the answers without professional
+verification.
 
-Municipal land-use rules (PZZ), local NGP and other acts outside the index may
-impose stricter requirements.
+Municipal land-use rules (PZZ) are not included in the index and must still be
+verified separately. Local NGP and other acts outside the index may impose
+stricter requirements.
 
 ## How citations are checked
 

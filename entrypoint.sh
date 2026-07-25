@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bothost: один образ, два сервиса. Роль — SERVICE_ROLE (api|bot).
+# Один образ, два сервиса. Роль — SERVICE_ROLE (api|bot).
 # Персистентность между деплоями — только /app/data (sqlite с фидбеком).
 set -e
 mkdir -p /app/data
@@ -14,6 +14,6 @@ if ! alembic upgrade head; then
     echo "WARNING: alembic upgrade head failed — starting api anyway"
 fi
 
-# PORT должен совпадать с «Порт веб-приложения» в панели Bothost (Bothost: 3000)
+# PORT — порт HTTP API в контейнере (прод: 3000)
 echo "starting api on 0.0.0.0:${PORT:-3000} (SERVICE_ROLE=${SERVICE_ROLE:-api})"
 exec uvicorn app.api.main:app --host 0.0.0.0 --port "${PORT:-3000}"

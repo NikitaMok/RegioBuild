@@ -1,8 +1,8 @@
-"""Smoke-проверки прод-API (Bothost).
+"""Smoke-проверки прод-API.
 
 Примеры:
-  python -m scripts.smoke_wave1_prod --api-url https://bot-xxx-yyy-nikitamok.bothost.tech
-  python -m scripts.smoke_wave1_prod --api-url https://... --full
+  python -m scripts.smoke_wave1_prod --api-url https://api.example.com
+  python -m scripts.smoke_wave1_prod --api-url https://api.example.com --full
 
 Без --full: только /health.
 С --full: info-запросы (тратит токены GigaChat).

@@ -1,6 +1,8 @@
 # Архитектура RegioBuild
 
-Как устроен пайплайн от НПА до ответа. Продуктовое описание —
+[English version](ARCHITECTURE_EN.md)
+
+Пайплайн от нормативного акта до ответа. Продуктовое описание —
 [`README.md`](../README.md).
 
 ## Схема
@@ -44,14 +46,21 @@ query_transform → retrieve → classify → rerank → LLM → format/guardrai
 - **Retrieval и generation разделены.** Метрики поиска (Recall@k, MRR) и
   читаемость ответа смотрим отдельно — иначе непонятно, чинить индекс или промпт.
 - **`LLMProvider`.** Один интерфейс; в проде GigaChat Ultra (`GigaChat-3-Ultra`,
-  `api.giga.chat`). YandexGPT в коде есть, failover по умолчанию выключен.
+  `api.giga.chat`), `temperature=0.0`. YandexGPT в коде есть, failover по
+  умолчанию выключен.
 - **Нормализация типа объекта до retrieval.** Длинные фразы и падежи плохо
   матчятся с канцеляритом НПА: сначала whitelist/корни, модель — если не вышло.
+- **Тиры объектов.** `group1` — профильные объекты РНГП (персональные нормы
+  обеспеченности); `group2` — рамочная коммерция (парковка, отступы, озеленение
+  + федеральный слой только из retrieved-чанков). См.
+  `config/object_categories.yaml`.
 - **Гибридный retrieval.** Dense (Qdrant) + лёгкий BM25 по кандидатам.
 - **Embeddings.** В проде — `fastembed` (ONNX). Индекс и runtime должны
   совпадать по backend.
 - **Федеральный фон.** `RU-FED` не выбирается как «регион» в UI. Региональный
   акт в приоритете; федеральные требования — отдельным блоком.
+- **Скоуп корпуса.** Муниципальные ПЗЗ и местные НГП вне индекса; при ответе
+  пользователю указывается необходимость отдельной проверки.
 - **Grounding и guardrail.** Пункты из JSON модели сверяются с
   `section_number` чанков. Нет опоры в корпусе — честный отказ.
 - **Формат ответа.** Нумерация различий с 1 в каждой категории; знак номера
@@ -69,8 +78,8 @@ query_transform → retrieve → classify → rerank → LLM → format/guardrai
 | `api` | FastAPI, warmup embeddings, `/metrics` |
 | `bot` | aiogram long polling → HTTP к API |
 
-Прод — VPS (nginx, API, bot, Prometheus/Alertmanager). Compose:
-`docker-compose.prod.yml`.
+Прод — VPS Aeza (nginx, API, bot, Prometheus → Grafana Cloud remote_write,
+Alertmanager). Compose: `docker-compose.prod.yml`.
 
 ## Данные
 
@@ -81,7 +90,7 @@ query_transform → retrieve → classify → rerank → LLM → format/guardrai
 | `config/documents.yaml` | манифест ingest |
 | `config/regions.yaml` | ISO-коды, алиасы, реквизиты актов |
 | Qdrant Cloud | коллекция `regiobuild_normative` |
-| `data/curated` | точечные выдержки (123-ФЗ, СанПиН и др.) |
+| `data/curated` | точечные выдержки (123-ФЗ, СанПиН, СП 42 и др.) |
 | SQL | документы, чанки, `query_logs` |
 
 Продуктовый скоуп: **5 субъектов + федеральный слой**. Архитектура допускает
@@ -90,6 +99,7 @@ query_transform → retrieve → classify → rerank → LLM → format/guardrai
 ## Observability
 
 - Prometheus: `GET /metrics` (в т.ч. `regiobuild_guardrail_blocks_total`)
+- Grafana Cloud: `remote_write` из Prometheus (учётные данные — только в `.env`)
 - Sentry по `SENTRY_DSN`
 - LLM cache: memory + disk
 - Дневной лимит запросов на `telegram_user_id`

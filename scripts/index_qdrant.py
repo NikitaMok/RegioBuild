@@ -1,7 +1,7 @@
 """Индексация structured chunks + curated → Qdrant.
 
 Индексатор и runtime API должны использовать один embedding backend
-(на Bothost — fastembed). Иначе retrieval деградирует.
+(в проде — fastembed). Иначе retrieval деградирует.
 
 Запуск (Qdrant Cloud или локальный):
   set VECTOR_BACKEND=qdrant
