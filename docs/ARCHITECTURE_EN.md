@@ -2,8 +2,8 @@
 
 [Русская версия](ARCHITECTURE.md)
 
-Pipeline from a normative act to an answer. Product overview:
-[`README_EN.md`](../README_EN.md).
+Processing path from a normative legal act to the user-facing answer.
+Product overview: [`README_EN.md`](../README_EN.md).
 
 ## Diagram
 
@@ -24,7 +24,7 @@ flowchart TD
     end
 
     N0 --> LLM["LLMProvider: GigaChat"]
-    N3 -- "region + RU-FED" --> VectorDB[(Qdrant)]
+    N3 -- "entity + RU-FED" --> VectorDB[(Qdrant)]
     N4 --> Classifier["TF-IDF + LogisticRegression"]
     N6 --> LLM
     N7 --> QueryLog[(query_logs)]
@@ -44,27 +44,28 @@ query_transform → retrieve → classify → rerank → LLM → format/guardrai
 ## Design choices
 
 - **Retrieval and generation are separated.** Search metrics (Recall@k, MRR) and
-  answer readability are evaluated independently — otherwise it is unclear
-  whether to fix the index or the prompt.
+  answer wording quality are evaluated independently — otherwise it is unclear
+  whether to fix the corpus or the prompt.
 - **`LLMProvider`.** One interface; production uses GigaChat Ultra
   (`GigaChat-3-Ultra`, `api.giga.chat`) with `temperature=0.0`. YandexGPT exists
   in code; failover is off by default.
 - **Object-type normalization before retrieval.** Long phrases and case forms
   match poorly against statutory language: whitelist/roots first, then the model
   if needed.
-- **Object tiers.** `group1` — specialised RNGP objects (personal provision
+- **Object categories.** `group1` — specialised RNGP objects (personal provision
   norms); `group2` — framework commercial objects (parking, setbacks,
-  landscaping + federal layer only from retrieved chunks). See
+  landscaping + federal layer only from retrieved fragments). See
   `config/object_categories.yaml`.
-- **Hybrid retrieval.** Dense (Qdrant) + light BM25 over candidates.
-- **Embeddings.** Production uses `fastembed` (ONNX). Index and runtime backends
-  must match.
-- **Federal layer.** `RU-FED` is not selectable as a “region” in the UI. The
+- **Hybrid retrieval.** Dense (Qdrant) + BM25 over candidates.
+- **Embeddings.** Production uses `fastembed` (ONNX). Indexing and runtime
+  backends must match.
+- **Federal layer.** `RU-FED` is not selectable as an entity in the UI. The
   regional act has priority; federal requirements appear as a separate block.
-- **Corpus scope.** Municipal PZZ and local NGP are outside the index; answers
-  tell the user to verify them separately.
+- **Service database limits.** Municipal land-use rules (PZZ) and local
+  urban-planning design standards are outside the database; answers tell the
+  user to verify them separately.
 - **Grounding and guardrail.** Model JSON clauses are checked against chunk
-  `section_number` values. Without corpus support — an explicit refusal.
+  `section_number` values. Without support in the database — an explicit refusal.
 - **Answer format.** Difference numbering restarts at 1 per category; act numbers
   use «№»; semicolons in user-facing text are removed during polish; the
   additional-checks block appears once per answer.
@@ -95,8 +96,9 @@ Alertmanager). Compose: `docker-compose.prod.yml`.
 | `data/curated` | curated excerpts (123-FZ, SanPiN, SP 42, etc.) |
 | SQL | documents, chunks, `query_logs` |
 
-Product scope: **5 regions + federal layer**. The architecture allows expansion
-without breaking contracts (see [`ADDING_REGION_EN.md`](ADDING_REGION_EN.md)).
+Product scope: **5 constituent entities of the Russian Federation + federal
+layer**. The architecture allows expansion without breaking contracts (see
+[`ADDING_REGION_EN.md`](ADDING_REGION_EN.md)).
 
 ## Observability
 

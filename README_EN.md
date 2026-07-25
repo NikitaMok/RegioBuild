@@ -7,36 +7,38 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 
 Differences in regional urban-planning design standards across the Russian
-Federation are hard to close by hand: each constituent entity of the Russian
-Federation has its own act structure, density of regulation, and tables.
-Federal norms set a baseline, but regional specifics often impose their own
-requirements.
+Federation are practically impossible to analyse quickly by hand, because each
+constituent entity of the Russian Federation has its own act structure, density
+of regulation, and so on. Federal norms set a baseline, but regional specifics
+often impose their own requirements.
 
-I know this problem space from a varied legal background. Even for an
-experienced lawyer, comparing regional requirements between two constituent
-entities of the Russian Federation for a single object type can take hours —
-and that still does not guarantee complete accuracy, because a material clause
-is easy to miss.
+I know this problem space: I have a varied legal background behind me.  
+Even for an experienced lawyer, comparing regional requirements between two
+constituent entities of the Russian Federation for a single object type can
+take hours or days — and that still does not guarantee complete accuracy,
+because a material clause is so easy to miss.
 
-**RegioBuild** builds a structured list of requirements for a capital
-construction object in a chosen constituent entity of the Russian Federation by
-analysing RNGP/TSN and the applicable federal layer, and compares requirements
-across two entities when needed.
+**RegioBuild** builds a list of requirements for a capital construction object
+in a chosen constituent entity of the Russian Federation, analyses RNGP/TSN and
+the federal layer, and can compare those requirements between two constituent
+entities of the Russian Federation.
 
 Telegram ([https://t.me/regiobuild_bot](https://t.me/regiobuild_bot)) is only a
-demonstration channel here. The product core is an HTTP API (`/info`,
-`/compare`, `/api/v1/*`, `/health`, `/metrics`). External systems integrate
-independently of the messenger.
+demonstration channel here.  
+The product core is an HTTP API (`/info`, `/compare`, `/api/v1/*`, `/health`,
+`/metrics`).  
+External systems integrate independently of the messenger.
 
 ---
 
 ## Terms of use
 
 RegioBuild is a reference tool, not legal advice.  
-The answers do not replace design documentation and/or a lawyer’s opinion, nor
-an independent check that norms are current at the time of the request.  
-Municipal land-use rules (PZZ) are not included in the index, so they must
-still be verified separately.  
+The answers do not replace design documentation, a lawyer’s opinion, or an
+independent check that the requirements of normative legal acts are current at
+the time of the request.  
+Municipal land-use rules (PZZ) are not included in the service database, so they
+must still be verified separately.  
 Details: [`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
 
 ---
@@ -109,9 +111,9 @@ Details: [`docs/LEGAL_DISCLAIMER_EN.md`](docs/LEGAL_DISCLAIMER_EN.md).
 | `RU-TA` | Republic of Tatarstan |
 | `RU-FED` | Federal layer: Urban Planning Code, SP 42, 123-FZ, SanPiN |
 
-The index is limited to this corpus. Local zoning (PZZ) / municipal level are
-out of scope. Adding a region is a config-and-data procedure:
-[`docs/ADDING_REGION_EN.md`](docs/ADDING_REGION_EN.md).
+The service database is limited to this corpus. Local zoning (PZZ) / municipal
+level are out of scope. Adding a constituent entity is a config-and-data
+procedure: [`docs/ADDING_REGION_EN.md`](docs/ADDING_REGION_EN.md).
 
 ---
 
