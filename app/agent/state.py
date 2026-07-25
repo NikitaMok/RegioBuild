@@ -10,6 +10,8 @@ class AgentState(TypedDict, total=False):
     mode: Literal["info", "compare"]
     business_type: str
     business_type_raw: Optional[str]
+    # group1 — профильные объекты РНГП; group2 — рамочная коммерция
+    object_tier: Optional[str]
     region_a: str
     region_b: Optional[str]
     transformed_query: Optional[str]

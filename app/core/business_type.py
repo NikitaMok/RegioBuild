@@ -16,6 +16,10 @@ _TYPO_ALIASES: dict[str, str] = {
     "медицинскй центр": "медицинский центр",
     "автомойкка": "автомойка",
     "автосервисз": "автосервис",
+    "мкд": "многоквартирный дом",
+    "жк": "многоквартирный дом",
+    "доу": "детский сад",
+    "дс": "детский сад",
 }
 
 _INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -194,14 +198,33 @@ _BUSINESS_TYPE_STEMS: dict[str, tuple[str, ...]] = {
     "цех": ("цех", "металлообработ"),
     "завод": ("завод", "заводск"),
     "производство": ("промышленн", "производственн"),
+    "детский сад": (
+        "детский сад",
+        "детского сада",
+        "детскому саду",
+        "детских сад",
+        "дошкольн",
+        "доу",
+    ),
+    "школа": ("школ", "общеобразовательн"),
+    "многоквартирный дом": (
+        "многоквартирн",
+        "мкд",
+        "жилой комплекс",
+        "жилого комплекса",
+    ),
+    "жилой дом": ("жилой дом", "жилого дома", "жилому дому", "жилые дома"),
 }
 
 
 def extract_known_business_type(text: str) -> str | None:
     """Достаёт известный тип из длинной фразы, в т.ч. в падежах («автомойки»)."""
-    lower = (text or "").strip().lower()
+    lower = (text or "").strip().lower().strip("«»\"'.")
     if not lower:
         return None
+
+    if lower in _TYPO_ALIASES:
+        return _TYPO_ALIASES[lower]
 
     # сначала длинные названия, чтобы «медицинский центр» победил «центр»
     for known in sorted(KNOWN_BUSINESS_TYPES, key=len, reverse=True):
@@ -211,6 +234,11 @@ def extract_known_business_type(text: str) -> str | None:
     for known, stems in _BUSINESS_TYPE_STEMS.items():
         if any(len(stem) >= 3 and stem in lower for stem in stems):
             return known
+
+    # отдельно короткие алиасы внутри фразы («МКД в крае», «ДОУ на 120 мест»)
+    for alias, canon in _TYPO_ALIASES.items():
+        if len(alias) <= 3 and re.search(rf"(?<![а-яёa-z]){re.escape(alias)}(?![а-яёa-z])", lower):
+            return canon
 
     for known in sorted(KNOWN_BUSINESS_TYPES, key=len, reverse=True):
         stem = known[:-1] if len(known) > 5 and known[-1] in "аяыи" else known
@@ -222,6 +250,30 @@ def extract_known_business_type(text: str) -> str | None:
 def looks_like_prompt_injection(text: str) -> bool:
     cleaned = text or ""
     return any(pattern.search(cleaned) for pattern in _INJECTION_PATTERNS)
+
+
+# короткие вторые слова в нормальных типах («жилой дом», «детский сад») —
+# не путать с обрывом вроде «Парко вка»
+_SAFE_SHORT_RIGHT_WORDS = frozenset(
+    {
+        "дом",
+        "дома",
+        "саду",
+        "сад",
+        "сада",
+        "зал",
+        "зала",
+        "бар",
+        "бара",
+        "тц",
+        "азс",
+        "жк",
+        "мкд",
+        "доу",
+        "офис",
+        "цех",
+    }
+)
 
 
 def looks_like_business_query(text: str) -> bool:
@@ -240,11 +292,18 @@ def looks_like_business_query(text: str) -> bool:
     if letters < 2 or letters / max(len(cleaned), 1) < 0.4:
         return False
 
+    # точный whitelist — до эвристики разрыва («жилой дом» = 5+3 буквы)
+    lowered = cleaned.lower().strip("«»\"'.")
+    if lowered in _TYPO_ALIASES or lowered in KNOWN_BUSINESS_TYPES:
+        return True
+
     words = re.findall(r"[а-яёa-z]+", cleaned.lower())
     # обрыв слова ищем только в коротких вводах («Парко вка возле тц»)
     if len(words) <= 5:
         for left, right in zip(words, words[1:]):
             if left in _SHORT_FUNCTION_WORDS or right in _SHORT_FUNCTION_WORDS:
+                continue
+            if right in _SAFE_SHORT_RIGHT_WORDS:
                 continue
             if 3 <= len(left) <= 5 and 2 <= len(right) <= 3:
                 return False

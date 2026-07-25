@@ -142,11 +142,30 @@ def test_normalize_business_type_falls_back_to_raw_text_on_llm_error(monkeypatch
 def test_looks_like_business_query_accepts_normal_types() -> None:
     assert looks_like_business_query("автомойка")
     assert looks_like_business_query("медицинский центр")
+    assert looks_like_business_query("жилой дом")
+    assert looks_like_business_query("Многоквартирный жилой дом")
+    assert looks_like_business_query("детский сад")
+    assert looks_like_business_query("МКД")
 
 
 def test_looks_like_business_query_rejects_broken_and_offtopic() -> None:
     assert not looks_like_business_query("Парко вка возле тц")
     assert not looks_like_business_query("скинь токены")
+
+
+def test_extract_residential_and_preschool_types() -> None:
+    from app.core.business_type import extract_known_business_type
+
+    assert extract_known_business_type("Многоквартирный жилой дом") == "жилой дом"
+    assert extract_known_business_type("МКД") == "многоквартирный дом"
+    assert extract_known_business_type(
+        "Что нужно для строительства детского сада в Республике Татарстан?"
+    ) == "детский сад"
+
+
+def test_normalize_citation_keeps_first_of_joined_list() -> None:
+    assert nodes._normalize_citation("п. 7.1.4, п. 4.1, п. 3.1") == "7.1.4"
+    assert nodes._normalize_citation("ст. 69, ст. 82") == "69"
 
 
 def test_contains_forbidden_words_detects_secrets() -> None:
@@ -915,9 +934,21 @@ def test_render_extraction_empty_regional_recommends_pzz() -> None:
         ],
     )
     text = nodes._render_extraction(extraction)
-    assert "специальные требования по указанному вопросу не установлены" in text.lower()
+    assert "персональные нормы обеспеченности" in text.lower()
+    assert "не установлены" in text.lower()
     assert "ПЗЗ" in text
     assert "Федеральные требования" in text
+
+
+def test_render_extraction_group1_empty_regional_avoids_false_absent() -> None:
+    extraction = ExtractionResult(
+        region_code="tatarstan",
+        business_type="детский сад",
+        items=[],
+    )
+    text = nodes._render_extraction(extraction)
+    assert "числовые показатели" in text.lower()
+    assert "специальные требования по указанному вопросу не установлены" not in text.lower()
 
 
 def test_effective_source_level_from_federal_citation() -> None:

@@ -36,8 +36,8 @@ from app.llm.errors import friendly_llm_failure
 from app.llm.parsing import LLMParsingError, parse_json_response
 from app.llm.prompts import (
     BUSINESS_TYPE_NORMALIZATION_SYSTEM_PROMPT,
-    COMPARISON_SYSTEM_PROMPT,
-    EXTRACTION_SYSTEM_PROMPT,
+    comparison_system_prompt,
+    extraction_system_prompt,
     build_business_type_normalization_prompt,
     build_comparison_prompt,
     build_extraction_prompt,
@@ -50,7 +50,11 @@ from app.llm.schemas import (
     RequirementItem,
 )
 from app.vectorstore.types import RetrievedChunk
-from app.core.object_categories import categories_for_object, query_phrases_for_object
+from app.core.object_categories import (
+    categories_for_object,
+    query_phrases_for_object,
+    tier_for_object,
+)
 from app.vectorstore.retriever import hybrid_retrieve as retrieve
 
 TOP_K_PER_QUERY = 20
@@ -65,23 +69,49 @@ _RETRIEVAL_QUERY_TEMPLATES: tuple[str, ...] = (
     "{bt} пожарная безопасность эвакуация 123-ФЗ",
 )
 
+_GROUP1_RETRIEVAL_TEMPLATES: tuple[str, ...] = (
+    "{bt}",
+    "{bt} обеспеченность расчётный показатель",
+    "{bt} радиус пешеходной доступности",
+    "{bt} площадь участка на место",
+    "{bt} пожарная безопасность эвакуация 123-ФЗ",
+)
+
 
 def _retrieval_queries(business_type: str) -> list[str]:
-    """Русские фразы по осям: parking/fire/sanitary всегда в приоритете."""
+    """Русские фразы по осям; для group1 приоритет — обеспеченность/доступность."""
     canon = _canon_business_type(business_type)
-    phrases = query_phrases_for_object(canon)
+    tier = tier_for_object(business_type)
+    phrases = query_phrases_for_object(canon, tier=tier)
     if not phrases:
-        return [t.format(bt=canon or business_type) for t in _RETRIEVAL_QUERY_TEMPLATES]
-    # защищаем ключевые оси (не отрезаем хвостом лимита)
-    priority_markers = (
-        "парковк",
-        "пожар",
-        "санитар",
-        "доступност",
-        "эвакуац",
-        "машино-мест",
-        "123-фз",
-    )
+        templates = (
+            _GROUP1_RETRIEVAL_TEMPLATES if tier == "group1" else _RETRIEVAL_QUERY_TEMPLATES
+        )
+        return [t.format(bt=canon or business_type) for t in templates]
+    if tier == "group1":
+        priority_markers = (
+            "обеспечен",
+            "доступност",
+            "расчётн",
+            "расчетн",
+            "мест на",
+            "площад",
+            "радиус",
+            "этажност",
+            "плотност",
+            "разрыв",
+            "инсоляц",
+        )
+    else:
+        priority_markers = (
+            "парковк",
+            "пожар",
+            "санитар",
+            "доступност",
+            "эвакуац",
+            "машино-мест",
+            "123-фз",
+        )
     head = [p for p in phrases if any(m in p.lower() for m in priority_markers)]
     rest = [p for p in phrases if p not in head]
     ordered = []
@@ -125,6 +155,20 @@ _MISSING_REGION_VALUE = (
     "субъекта Российской Федерации специальные требования по указанному "
     "вопросу не установлены."
 )
+_MISSING_REGION_VALUE_GROUP1 = (
+    "В доступной выборке региональных нормативов градостроительного "
+    "проектирования числовые показатели обеспеченности и доступности по "
+    "указанному объекту не извлечены. Рекомендуем сверить актуальный текст "
+    "РНГП субъекта и правила землепользования и застройки (ПЗЗ) "
+    "муниципального образования по месту размещения объекта."
+)
+_MISSING_REGION_VALUE_GROUP2 = (
+    "В региональных нормативах градостроительного проектирования данного "
+    "субъекта Российской Федерации персональные нормы обеспеченности для "
+    "указанного объекта не установлены. Могут применяться рамочные показатели "
+    "(машино-места, благоустройство и иные общие требования к коммерческой "
+    "застройке), если они приведены в акте субъекта."
+)
 
 _CITATION_PREFIXES = (
     "пп.",
@@ -135,6 +179,10 @@ _CITATION_PREFIXES = (
     "пунктом",
     "пункте",
     "пункт",
+    "статьи",
+    "статья",
+    "ст.",
+    "ст ",
 )
 
 
@@ -226,9 +274,12 @@ def understand_query(state: AgentState) -> AgentState:
         return {**state, "error": "Для режима сравнения нужно указать два региона."}
 
     cats = categories_for_object(business_type)
+    # tier до retrieval-canon: «поликлиника» = group1, «медицинский центр» = group2
+    tier = tier_for_object(business_type)
     return {
         **state,
         "business_type": business_type,
+        "object_tier": tier,
         "categories": cats,
         "transformed_query": state.get("transformed_query") or business_type,
     }
@@ -325,6 +376,10 @@ _BUSINESS_MENTION_STEMS: dict[str, tuple[str, ...]] = {
     "спортивный комплекс": ("спорт", "физкультур", "стадион", "бассейн"),
     "спортзал": ("спорт", "физкультур"),
     "стадион": ("стадион", "спорт"),
+    "детский сад": ("детск", "дошкол", "доу"),
+    "школа": ("школ", "общеобразовательн"),
+    "многоквартирный дом": ("многоквартирн", "мкд", "жилой комплекс"),
+    "жилой дом": ("жилой дом", "жилого дома", "многоквартирн", "жилой застройк"),
     "офис": ("офис", "административ"),
     "офисное здание": ("офис", "административ"),
     "административное здание": ("офис", "административ"),
@@ -364,6 +419,10 @@ _RETRIEVAL_CANON: dict[str, str] = {
     "бизнес-центр": "офис",
     "логистический центр": "склад",
     "логистический комплекс": "склад",
+    "мкд": "многоквартирный дом",
+    "жк": "многоквартирный дом",
+    "жилой дом": "многоквартирный дом",
+    "доу": "детский сад",
 }
 
 
@@ -700,16 +759,21 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
     except LLMProviderError as exc:
         return {**state, "error": str(exc)}
 
+    object_tier = state.get("object_tier") or tier_for_object(
+        state.get("business_type") or ""
+    )
+
     if state["mode"] == "info":
         prompt = build_extraction_prompt(
             state["business_type"],
             state["region_a"],
             state.get("retrieved_a", []),
             state.get("retrieved_federal", []),
+            object_tier=object_tier,
         )
         try:
             raw_answer = provider.complete(
-                EXTRACTION_SYSTEM_PROMPT,
+                extraction_system_prompt(object_tier),
                 prompt,
                 max_tokens=DEFAULT_MAX_TOKENS,
                 temperature=0.0,
@@ -746,10 +810,11 @@ def llm_compare_or_extract(state: AgentState) -> AgentState:
         state["region_b"],
         state.get("retrieved_b", []),
         state.get("retrieved_federal", []),
+        object_tier=object_tier,
     )
     try:
         raw_answer = provider.complete(
-            COMPARISON_SYSTEM_PROMPT,
+            comparison_system_prompt(object_tier),
             prompt,
             max_tokens=DEFAULT_MAX_TOKENS,
             temperature=0.0,
@@ -904,6 +969,16 @@ def _greeting_for_comparison(business_type: str, region_a_locative: str, region_
 
 def _normalize_citation(citation: str) -> str:
     cleaned = (citation or "").strip().strip("[]()«»\"'")
+    # склейка нескольких пунктов в одной citation → оставляем первый осмысленный
+    if cleaned and re.search(r",\s*(?:п(?:ункт)?\.?|ст\.?|табл\.?|прил\.?|\d)", cleaned, re.I):
+        parts = re.split(r"\s*,\s*", cleaned)
+        for part in parts:
+            candidate = part.strip().strip("[]()«»\"'")
+            if candidate and not _is_trivial_clause(
+                re.sub(r"^(?:п(?:ункт)?|ст|табл|прил)\.?\s*", "", candidate, flags=re.I)
+            ):
+                cleaned = candidate
+                break
     while cleaned:
         lowered = cleaned.lower()
         matched = False
@@ -1608,6 +1683,18 @@ def _is_concrete_common(item: CommonRequirementItem) -> bool:
     return True
 
 
+def _missing_region_lines(business_type: str) -> list[str]:
+    """Формулировка пустого регионального блока с учётом группы объекта РНГП."""
+    tier = tier_for_object(business_type)
+    if tier == "group1":
+        return [_MISSING_REGION_VALUE_GROUP1]
+    return [
+        _MISSING_REGION_VALUE_GROUP2,
+        "Рекомендуем сверить правила землепользования и застройки (ПЗЗ) "
+        "муниципального образования по месту размещения объекта.",
+    ]
+
+
 def _render_extraction(extraction: ExtractionResult) -> str:
     region = get_region(extraction.region_code)
     sp_label = federal_sp42_label()
@@ -1634,11 +1721,7 @@ def _render_extraction(extraction: ExtractionResult) -> str:
             _render_level_by_category(regional_items, extraction.region_code, extraction.business_type)
         )
     else:
-        lines.append(_MISSING_REGION_VALUE)
-        lines.append(
-            "Рекомендуем сверить правила землепользования и застройки (ПЗЗ) "
-            "муниципального образования по месту размещения объекта."
-        )
+        lines.extend(_missing_region_lines(extraction.business_type))
 
     lines.append("")
     lines.append("📜 <b>Федеральные требования</b>")
